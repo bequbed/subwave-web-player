@@ -10,6 +10,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { config } from '@/config';
 
+type StreamQuality = 'flac' | 'mp3';
+
+function canPlayFlac(el: HTMLAudioElement): boolean {
+  return ['audio/flac', 'audio/ogg; codecs="flac"'].some(
+    (type) => el.canPlayType(type) === 'probably' || el.canPlayType(type) === 'maybe',
+  );
+}
+
 export interface Player {
   /** Whether audio is currently playing. */
   playing: boolean;
@@ -17,6 +25,8 @@ export interface Player {
   tunedIn: boolean;
   /** True while the browser is buffering the stream after a play(). */
   loading: boolean;
+  /** Format currently selected for the live stream. */
+  quality: StreamQuality | null;
   volume: number;
   muted: boolean;
   /** Begin playback. Safe to call from a click handler. */
@@ -32,8 +42,14 @@ export function usePlayer(): Player {
   const [playing, setPlaying] = useState(false);
   const [tunedIn, setTunedIn] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [quality, setQuality] = useState<StreamQuality | null>(null);
   const [volume, setVolumeState] = useState(0.85);
   const [muted, setMuted] = useState(false);
+  const qualityRef = useRef<StreamQuality | null>(null);
+  const fallbackAttemptedRef = useRef(false);
+  const playbackStartedRef = useRef(false);
+  const sourceAttemptRef = useRef(0);
+  const assignedSourceRef = useRef<string | null>(null);
 
   // Create the element once. It lives for the app's lifetime.
   useEffect(() => {
@@ -44,12 +60,39 @@ export function usePlayer(): Player {
     audioRef.current = el;
 
     const onPlaying = () => {
+      playbackStartedRef.current = true;
+      setTunedIn(true);
       setPlaying(true);
       setLoading(false);
     };
     const onPause = () => setPlaying(false);
     const onWaiting = () => setLoading(true);
     const onError = () => {
+      // Media error events carry no attempt token. The src/currentSrc IDL values
+      // are browser-normalized absolute URLs, so only handle the event while
+      // currentSrc still identifies the exact uniquely-tagged URL we assigned.
+      // A queued error from a replaced resource therefore cannot mutate the new
+      // attempt, while an active FLAC error still reaches the one MP3 fallback.
+      if (!assignedSourceRef.current || el.currentSrc !== assignedSourceRef.current) return;
+
+      if (
+        qualityRef.current === 'flac' &&
+        !playbackStartedRef.current &&
+        !fallbackAttemptedRef.current
+      ) {
+        fallbackAttemptedRef.current = true;
+        const fallbackAttempt = ++sourceAttemptRef.current;
+        qualityRef.current = 'mp3';
+        el.src = `${config.mp3StreamUrl}?t=${Date.now()}&attempt=${fallbackAttempt}`;
+        assignedSourceRef.current = el.src;
+        setQuality('mp3');
+        void el.play().catch(() => {
+          if (sourceAttemptRef.current !== fallbackAttempt) return;
+          setPlaying(false);
+          setLoading(false);
+        });
+        return;
+      }
       setPlaying(false);
       setLoading(false);
     };
@@ -60,12 +103,14 @@ export function usePlayer(): Player {
     el.addEventListener('error', onError);
 
     return () => {
+      sourceAttemptRef.current += 1;
       el.pause();
       el.removeEventListener('playing', onPlaying);
       el.removeEventListener('pause', onPause);
       el.removeEventListener('waiting', onWaiting);
       el.removeEventListener('stalled', onWaiting);
       el.removeEventListener('error', onError);
+      assignedSourceRef.current = null;
       el.src = '';
       audioRef.current = null;
     };
@@ -79,36 +124,48 @@ export function usePlayer(): Player {
   }, [volume, muted]);
 
   function play() {
+    const sourceAttempt = ++sourceAttemptRef.current;
     const el = audioRef.current;
     if (!el) return;
+    fallbackAttemptedRef.current = false;
+    playbackStartedRef.current = false;
+    const selectedQuality: StreamQuality = canPlayFlac(el) ? 'flac' : 'mp3';
+    qualityRef.current = selectedQuality;
     // Re-point at the live edge every time we start: a paused live stream goes
     // stale, so we reload rather than resume from a buffered position.
-    el.src = `${config.streamUrl}?t=${Date.now()}`;
+    const streamUrl =
+      selectedQuality === 'flac' ? config.flacStreamUrl : config.mp3StreamUrl;
+    el.src = `${streamUrl}?t=${Date.now()}&attempt=${sourceAttempt}`;
+    assignedSourceRef.current = el.src;
+    setQuality(selectedQuality);
     setLoading(true);
-    el.play()
-      .then(() => {
-        setTunedIn(true);
-      })
-      .catch(() => {
-        // Autoplay blocked or network error — surface as "not playing".
-        setLoading(false);
-        setPlaying(false);
-      });
+    void el.play().catch(() => {
+      if (sourceAttemptRef.current !== sourceAttempt) return;
+      // Autoplay blocked or network error — surface as "not playing".
+      setLoading(false);
+      setPlaying(false);
+    });
   }
 
   function stop() {
+    sourceAttemptRef.current += 1;
     const el = audioRef.current;
     if (!el) return;
     el.pause();
+    assignedSourceRef.current = null;
     el.src = '';
+    qualityRef.current = null;
+    playbackStartedRef.current = false;
     setPlaying(false);
     setLoading(false);
+    setQuality(null);
   }
 
   return {
     playing,
     tunedIn,
     loading,
+    quality,
     volume,
     muted,
     tuneIn: play,

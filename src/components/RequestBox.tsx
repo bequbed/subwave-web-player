@@ -3,16 +3,19 @@
 // and works it into the flow. The POST returns instantly and we poll for the
 // outcome, so this shows a live "finding your track…" → resolved/failed card.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useRequest } from '@/hooks/useRequest';
 import { Panel } from '@/components/ui/Panel';
 
 export function RequestBox() {
   const [text, setText] = useState('');
   const [name, setName] = useState('');
+  const requestId = useId();
+  const nameId = useId();
   const { state, submit, reset } = useRequest();
 
   const busy = state.phase === 'submitting' || state.phase === 'pending';
+  const failed = state.phase === 'done' && state.status === 'failed';
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,29 +27,40 @@ export function RequestBox() {
 
   return (
     <Panel title="Request a track" className="h-full">
-      <div className="flex h-full flex-col p-4">
-        <form onSubmit={onSubmit} className="space-y-2.5">
+      <div className="flex h-full flex-col p-4 sm:p-5">
+        <form onSubmit={onSubmit} className="space-y-3">
+          <label htmlFor={requestId} className="block text-xs font-medium text-[var(--fg)]">
+            Song, artist, or vibe
+          </label>
           <input
+            id={requestId}
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Play something… (artist, song, or a vibe)"
             maxLength={200}
             disabled={busy}
-            className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
+            className="w-full rounded-xl border border-white/15 bg-black/25 px-3.5 py-3 text-sm text-[var(--fg)] shadow-inner shadow-black/20 placeholder:text-[var(--muted)] focus:border-[var(--signal)] focus:outline-none focus:ring-2 focus:ring-[var(--signal)]/20 disabled:cursor-not-allowed disabled:opacity-60"
           />
-          <div className="flex gap-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name (optional)"
-              maxLength={40}
-              disabled={busy}
-              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
-            />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label
+              htmlFor={nameId}
+              className="min-w-0 flex-1 text-xs font-medium text-[var(--fg)]"
+            >
+              Your name <span className="font-normal text-[var(--muted)]">(optional)</span>
+              <input
+                id={nameId}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name (optional)"
+                maxLength={40}
+                disabled={busy}
+                className="mt-1.5 w-full min-w-0 rounded-xl border border-white/15 bg-black/25 px-3.5 py-2.5 text-sm font-normal text-[var(--fg)] shadow-inner shadow-black/20 placeholder:text-[var(--muted)] focus:border-[var(--signal)] focus:outline-none focus:ring-2 focus:ring-[var(--signal)]/20 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </label>
             <button
               type="submit"
               disabled={busy || !text.trim()}
-              className="shrink-0 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] px-4 py-2 text-sm font-semibold text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              className="shrink-0 rounded-xl bg-[var(--signal)] px-5 py-2.5 text-sm font-bold text-[var(--ink)] shadow-[0_8px_24px_color-mix(in_srgb,var(--signal)_18%,transparent)] transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
             >
               {busy ? 'Sending…' : 'Send'}
             </button>
@@ -54,15 +68,31 @@ export function RequestBox() {
         </form>
 
         {/* Outcome */}
-        <div className="mt-3 flex-1">
+        <div
+          className="mt-4 flex-1"
+          role={failed ? 'alert' : 'status'}
+          aria-live="polite"
+          aria-atomic="true"
+          aria-relevant="additions text"
+        >
           {state.phase === 'pending' && (
-            <p className="text-sm text-[var(--accent)]">🎧 Finding your track…</p>
+            <p className="rounded-xl border border-[var(--signal)]/25 bg-[var(--signal)]/8 p-3 text-sm text-[var(--signal)]">
+              🎧 Finding your track…
+            </p>
           )}
           {state.phase === 'done' && (
-            <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-3">
+            <div
+              className={`rounded-xl border p-3.5 ${
+                state.status === 'resolved'
+                  ? 'border-[var(--signal)]/30 bg-[var(--signal)]/8'
+                  : state.status === 'failed'
+                    ? 'border-red-300/25 bg-red-300/8'
+                    : 'border-[var(--atmosphere)]/30 bg-[var(--atmosphere)]/8'
+              }`}
+            >
               {state.status === 'resolved' ? (
                 <>
-                  <p className="text-sm font-medium text-[var(--fg)]">✓ Queued up</p>
+                  <p className="text-sm font-semibold text-[var(--signal)]">✓ Queued up</p>
                   {track && (
                     <p className="mt-1 text-sm text-[var(--muted)]">
                       <span className="text-[var(--fg)]">{track.title}</span>
@@ -72,17 +102,17 @@ export function RequestBox() {
                   {reply && <p className="mt-1 text-xs italic text-[var(--muted)]">“{reply}”</p>}
                 </>
               ) : state.status === 'failed' ? (
-                <p className="text-sm text-[var(--muted)]">
+                <p className="text-sm text-red-100/80">
                   Couldn&apos;t find that one in the library. Try another?
                 </p>
               ) : (
-                <p className="text-sm text-[var(--muted)]">
+                <p className="text-sm text-[var(--atmosphere)]">
                   Still working on it — it may turn up on air shortly.
                 </p>
               )}
               <button
                 onClick={reset}
-                className="mt-2 text-xs text-[var(--accent)] hover:underline"
+                className="mt-3 rounded-sm text-xs font-semibold text-[var(--signal)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal)]"
               >
                 Request another
               </button>

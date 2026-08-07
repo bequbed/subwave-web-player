@@ -1,7 +1,6 @@
-// The transport row: tune-in / play-pause, volume, and the live station vitals
-// (listener count, stream bitrate, and the cumulative LLM-token ticker the DJ
-// has spent talking). Takes the Player from usePlayer; reads vitals from the
-// shared feed.
+// The transport row: tune-in / play-pause, volume, selected stream quality,
+// and live station vitals. Takes the Player from usePlayer; reads vitals from
+// the shared feed. Live radio intentionally has no seek or skip controls.
 
 import { useStationFeed } from '@/hooks/useStationFeed';
 import type { Player } from '@/hooks/usePlayer';
@@ -9,14 +8,14 @@ import { compact, listenerCount } from '@/lib/format';
 
 function PlayIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden>
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden>
       <path d="M8 5v14l11-7z" />
     </svg>
   );
 }
 function PauseIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden>
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden>
       <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
     </svg>
   );
@@ -32,9 +31,11 @@ function Spinner() {
 
 function Vital({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col items-center leading-tight">
-      <span className="text-sm font-semibold tabular-nums text-[var(--fg)]">{value}</span>
-      <span className="text-[10px] uppercase tracking-wider text-[var(--muted)]">{label}</span>
+    <div className="flex min-w-0 flex-col leading-tight">
+      <span className="text-sm font-semibold tabular-nums text-[var(--fg)]/85">{value}</span>
+      <span className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+        {label}
+      </span>
     </div>
   );
 }
@@ -45,38 +46,77 @@ export function PlayerBar({ player }: { player: Player }) {
   const bitrate = nowPlaying?.streamBitrate ?? null;
   const tokens = nowPlaying?.llmTokens ?? null;
 
-  const { playing, loading, toggle, tunedIn, volume, setVolume, muted, toggleMute } = player;
+  const {
+    playing,
+    loading,
+    quality,
+    toggle,
+    tunedIn,
+    volume,
+    setVolume,
+    muted,
+    toggleMute,
+  } = player;
+
+  const qualityLabel =
+    quality === 'flac'
+      ? 'FLAC · lossless'
+      : quality === 'mp3'
+        ? `MP3 · ${bitrate ?? 'live'} kbps`
+        : loading
+          ? 'Selecting quality…'
+          : null;
+
+  const buttonLabel = playing ? 'Pause' : tunedIn ? 'Play' : 'Tune in';
+  const stateTitle = loading ? 'Buffering…' : playing ? 'On air' : tunedIn ? 'Paused' : 'Ready to listen';
+  const stateDetail = playing
+    ? 'Live signal connected'
+    : tunedIn
+      ? 'Tune in again at the live edge'
+      : 'Live radio · no rewind';
 
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3 sm:gap-6 sm:px-5">
-      {/* Play / tune-in */}
-      <button
-        onClick={toggle}
-        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] text-black shadow-lg transition hover:brightness-110 active:scale-95"
-        aria-label={playing ? 'Pause' : tunedIn ? 'Play' : 'Tune in'}
-      >
-        {loading ? <Spinner /> : playing ? <PauseIcon /> : <PlayIcon />}
-      </button>
+    <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4 shadow-xl shadow-black/15 sm:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        {/* The only transport: tune in at the live edge or pause. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-4">
+          <button
+            onClick={toggle}
+            className="inline-flex min-h-14 shrink-0 items-center justify-center gap-2.5 rounded-2xl bg-[var(--signal)] px-5 font-bold text-black shadow-lg shadow-black/25 transition-[transform,filter,box-shadow] hover:brightness-105 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--bg)]"
+            aria-label={buttonLabel}
+            aria-busy={loading}
+          >
+            {loading ? <Spinner /> : playing ? <PauseIcon /> : <PlayIcon />}
+            <span>{buttonLabel}</span>
+          </button>
 
-      {!tunedIn && !playing ? (
-        <span className="text-sm text-[var(--muted)]">
-          Tap to tune in — <span className="text-[var(--fg)]">live radio</span>, no rewind.
-        </span>
-      ) : (
-        <span className="text-sm font-medium text-[var(--accent)]">
-          {loading ? 'Buffering…' : playing ? 'On air' : 'Paused'}
-        </span>
-      )}
+          <div className="min-w-0 flex-1 basis-36" aria-live="polite">
+            <p className="text-sm font-semibold text-[var(--fg)]">{stateTitle}</p>
+            <p className="mt-0.5 break-words text-xs leading-relaxed text-[var(--muted)]">
+              {stateDetail}
+            </p>
+          </div>
+        </div>
 
-      <div className="ml-auto flex items-center gap-4 sm:gap-6">
-        {/* Volume */}
-        <div className="hidden items-center gap-2 sm:flex">
+        {qualityLabel && (
+          <div
+            className="w-fit rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-[var(--muted)]"
+            aria-live="polite"
+          >
+            {qualityLabel}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-4 border-t border-[var(--line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Volume remains the only continuous control. */}
+        <div className="flex min-w-0 items-center gap-3 sm:w-48">
           <button
             onClick={toggleMute}
-            className="text-[var(--muted)] transition hover:text-[var(--fg)]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
             aria-label={muted ? 'Unmute' : 'Mute'}
           >
-            {muted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+            <span aria-hidden="true">{muted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</span>
           </button>
           <input
             type="range"
@@ -85,12 +125,12 @@ export function PlayerBar({ player }: { player: Player }) {
             step={0.01}
             value={muted ? 0 : volume}
             onChange={(e) => setVolume(Number(e.target.value))}
-            className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-[var(--panel-2)] accent-[var(--accent)]"
+            className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--panel-2)] accent-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--bg)]"
             aria-label="Volume"
           />
         </div>
 
-        <div className="flex items-center gap-4 sm:gap-5">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 sm:justify-end">
           {listeners != null && <Vital label="listening" value={String(listeners)} />}
           {bitrate != null && <Vital label="kbps" value={String(bitrate)} />}
           {tokens != null && <Vital label="DJ tokens" value={compact(tokens)} />}
