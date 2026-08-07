@@ -26,20 +26,33 @@ function stationHost() {
 function Header() {
   const { online, ready, nowPlaying } = useStationFeed();
   const station = nowPlaying?.dj?.station || 'SUB/WAVE';
+
   return (
-    <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] text-lg font-black text-black">
-          ◉
+    <header className="mb-6 border-b border-[var(--line)] pb-4 sm:mb-8 sm:pb-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            aria-hidden="true"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] text-sm font-black text-[var(--signal)] shadow-[0_0_24px_color-mix(in_srgb,var(--signal)_12%,transparent)]"
+          >
+            ◉
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold leading-tight tracking-[-0.02em] sm:text-lg">
+              {station}
+            </h1>
+            <p className="mt-0.5 truncate text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+              {stationHost()}
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-bold leading-none tracking-tight">{station}</h1>
-          <p className="mt-0.5 text-[11px] text-[var(--muted)]">{stationHost()}</p>
+
+        <div className="flex min-w-0 items-center justify-between gap-4 sm:justify-end">
+          <aside aria-label="On air host" className="min-w-0">
+            <OnAir />
+          </aside>
+          <SignalDot online={online} ready={ready} />
         </div>
-      </div>
-      <div className="flex items-center gap-4">
-        <OnAir />
-        <SignalDot online={online} ready={ready} />
       </div>
     </header>
   );
@@ -56,37 +69,45 @@ function PlayerView() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       <Header />
 
-      <div className="space-y-4">
-        <NowPlaying playing={player.playing} />
-        <PlayerBar player={player} />
+      <main className="space-y-5 sm:space-y-6">
+        <section aria-label="Now playing" className="space-y-3">
+          <NowPlaying playing={player.playing} />
+          <PlayerBar player={player} />
+        </section>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="h-[400px] lg:col-span-2">
+        <section
+          aria-label="Station activity"
+          className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5"
+        >
+          <section aria-label="The Booth" className="h-[26rem] lg:col-span-8 lg:h-[28rem]">
             <BoothFeed />
-          </div>
-          <div className="h-[400px]">
+          </section>
+          <aside aria-label="Request a track" className="h-[22rem] lg:col-span-4 lg:h-[28rem]">
             <RequestBox />
-          </div>
-          <div className="h-[380px]">
+          </aside>
+          <aside aria-label="On the Deck" className="h-[24rem] lg:col-span-4 lg:h-[25rem]">
             <Queue />
-          </div>
-          <div className="h-[380px] lg:col-span-2">
+          </aside>
+          <section
+            aria-label="Weekly schedule"
+            className="h-[24rem] lg:col-span-8 lg:h-[25rem]"
+          >
             <Schedule />
-          </div>
-        </div>
-      </div>
+          </section>
+        </section>
+      </main>
 
-      <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--muted)]">
+      <footer className="mt-8 flex flex-col gap-2 border-t border-[var(--line)] pt-4 text-[11px] text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between">
         <span>
           A reference SUB/WAVE web player · point it at any station with{' '}
           <code className="rounded bg-[var(--panel-2)] px-1 py-0.5">VITE_STATION_URL</code>
         </span>
         <a
           href="https://github.com/perminder-klair/subwave"
-          className="hover:text-[var(--accent)]"
+          className="w-fit rounded-sm transition-colors hover:text-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--signal)]"
           target="_blank"
           rel="noreferrer"
         >
