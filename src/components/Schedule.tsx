@@ -53,7 +53,7 @@ export function Schedule() {
       }
       className="h-full"
     >
-      <div className="scroll-thin h-full overflow-auto p-3">
+      <div className="scroll-thin h-full overflow-auto p-3 sm:p-4">
         {loading ? (
           <p className="py-8 text-center text-sm text-[var(--muted)]">Loading schedule…</p>
         ) : error || !data ? (
@@ -63,12 +63,12 @@ export function Schedule() {
         ) : (
           <div className="min-w-[560px]">
             {/* Hour axis */}
-            <div className="grid grid-cols-[36px_repeat(24,1fr)] gap-px">
+            <div className="grid grid-cols-[36px_repeat(24,1fr)] gap-px border-b border-[var(--line)] pb-1">
               <div />
               {HOURS.map((h) => (
                 <div
                   key={h}
-                  className="pb-1 text-center text-[9px] text-[var(--muted)]"
+                  className={`rounded-sm pb-1 text-center text-[9px] ${h === now.hour ? 'bg-[var(--signal)]/10 font-semibold text-[var(--signal)]' : 'text-[var(--muted)]'}`}
                 >
                   {h % 3 === 0 ? hourLabel(h) : ''}
                 </div>
@@ -78,7 +78,7 @@ export function Schedule() {
             {DAYS.map((d) => {
               const row = data.schedule?.[d] ?? [];
               return (
-                <div key={d} className="grid grid-cols-[36px_repeat(24,1fr)] items-center gap-px">
+                <div key={d} className="grid grid-cols-[36px_repeat(24,1fr)] items-center gap-px py-px">
                   <div className="pr-1 text-right text-[10px] font-medium text-[var(--muted)]">
                     {dayName(d)}
                   </div>
@@ -90,10 +90,14 @@ export function Schedule() {
                       <div
                         key={h}
                         title={show ? `${show.name} · ${hourLabel(h)}` : hourLabel(h)}
-                        className={`h-6 rounded-[3px] ${isNow ? 'ring-2 ring-[var(--accent)]' : ''}`}
+                        className={`h-6 rounded-[3px] border ${show ? 'border-white/10' : 'border-white/[0.025]'} ${isNow ? 'relative z-10 ring-2 ring-[var(--signal)] ring-offset-1 ring-offset-[var(--panel)]' : ''}`}
                         style={{
-                          background: show ? gradientFor(show.id) : 'var(--panel-2)',
-                          opacity: show ? 1 : 0.5,
+                          background: isNow
+                            ? `${show ? 'linear-gradient(rgb(199 243 107 / 0.18), rgb(199 243 107 / 0.18)), ' : ''}${show ? gradientFor(show.id) : 'rgb(199 243 107 / 0.16)'}`
+                            : show
+                              ? gradientFor(show.id)
+                              : 'var(--panel-2)',
+                          opacity: show || isNow ? 1 : 0.22,
                         }}
                       />
                     );
@@ -104,11 +108,11 @@ export function Schedule() {
 
             {/* Legend */}
             {data.shows.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap gap-x-3 gap-y-2 border-t border-[var(--line)] pt-3">
                 {data.shows.slice(0, 8).map((s) => (
-                  <span key={s.id} className="flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
+                  <span key={s.id} className="flex items-center gap-1.5 text-[11px] text-[var(--fg)]/75">
                     <span
-                      className="inline-block h-3 w-3 rounded-[3px]"
+                      className="inline-block h-3 w-3 rounded-[3px] border border-white/15"
                       style={{ background: gradientFor(s.id) }}
                     />
                     {s.name}
