@@ -51,7 +51,7 @@ export function Schedule() {
           <span className="text-[10px] text-[var(--muted)]">station time · {data.timezone}</span>
         ) : undefined
       }
-      className="h-full"
+      className="h-full overflow-hidden"
     >
       <div className="scroll-thin h-full overflow-auto p-3 sm:p-4">
         {loading ? (
