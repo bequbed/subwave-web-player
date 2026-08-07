@@ -49,6 +49,7 @@ export function usePlayer(): Player {
   const fallbackAttemptedRef = useRef(false);
   const playbackStartedRef = useRef(false);
   const sourceAttemptRef = useRef(0);
+  const assignedSourceRef = useRef<string | null>(null);
 
   // Create the element once. It lives for the app's lifetime.
   useEffect(() => {
@@ -67,6 +68,13 @@ export function usePlayer(): Player {
     const onPause = () => setPlaying(false);
     const onWaiting = () => setLoading(true);
     const onError = () => {
+      // Media error events carry no attempt token. The src/currentSrc IDL values
+      // are browser-normalized absolute URLs, so only handle the event while
+      // currentSrc still identifies the exact uniquely-tagged URL we assigned.
+      // A queued error from a replaced resource therefore cannot mutate the new
+      // attempt, while an active FLAC error still reaches the one MP3 fallback.
+      if (!assignedSourceRef.current || el.currentSrc !== assignedSourceRef.current) return;
+
       if (
         qualityRef.current === 'flac' &&
         !playbackStartedRef.current &&
@@ -75,7 +83,8 @@ export function usePlayer(): Player {
         fallbackAttemptedRef.current = true;
         const fallbackAttempt = ++sourceAttemptRef.current;
         qualityRef.current = 'mp3';
-        el.src = `${config.mp3StreamUrl}?t=${Date.now()}`;
+        el.src = `${config.mp3StreamUrl}?t=${Date.now()}&attempt=${fallbackAttempt}`;
+        assignedSourceRef.current = el.src;
         setQuality('mp3');
         void el.play().catch(() => {
           if (sourceAttemptRef.current !== fallbackAttempt) return;
@@ -101,6 +110,7 @@ export function usePlayer(): Player {
       el.removeEventListener('waiting', onWaiting);
       el.removeEventListener('stalled', onWaiting);
       el.removeEventListener('error', onError);
+      assignedSourceRef.current = null;
       el.src = '';
       audioRef.current = null;
     };
@@ -125,7 +135,8 @@ export function usePlayer(): Player {
     // stale, so we reload rather than resume from a buffered position.
     const streamUrl =
       selectedQuality === 'flac' ? config.flacStreamUrl : config.mp3StreamUrl;
-    el.src = `${streamUrl}?t=${Date.now()}`;
+    el.src = `${streamUrl}?t=${Date.now()}&attempt=${sourceAttempt}`;
+    assignedSourceRef.current = el.src;
     setQuality(selectedQuality);
     setLoading(true);
     void el.play().catch(() => {
@@ -141,6 +152,7 @@ export function usePlayer(): Player {
     const el = audioRef.current;
     if (!el) return;
     el.pause();
+    assignedSourceRef.current = null;
     el.src = '';
     qualityRef.current = null;
     playbackStartedRef.current = false;
