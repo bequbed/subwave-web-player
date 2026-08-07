@@ -1,0 +1,12 @@
+services:
+  player:
+    build:
+      context: .
+      args:
+        # Which station the build tunes into. Inlined at build time — change it
+        # and rebuild (`docker compose up -d --build`). Defaults to the public
+        # station.
+        VITE_STATION_URL: ${VITE_STATION_URL:-https://www.getsubwave.com}
+    ports:
+      - "${PORT:-8080}:80"
+    restart: unless-stopped

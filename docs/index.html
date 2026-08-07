@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SUB/WAVE Web Player — build your own radio player</title>
+    <meta
+      name="description"
+      content="A small, forkable reference web player for a SUB/WAVE internet radio station. Clone it, restyle it with a coding agent, and deploy it. Plus a guide to building your own player against the SUB/WAVE public API."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23161412'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23f3efe6' stroke-width='1.4'/%3E%3Ccircle cx='16' cy='16' r='4.5' fill='%23d94b2a'/%3E%3Ccircle cx='16' cy='16' r='1.3' fill='%23161412'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* --- SUB/WAVE "Frequency" newsprint palette --- */
+      :root {
+        --bg: #f3efe6;
+        --ink: #161412;
+        --muted: #7a736a;
+        --accent: #d94b2a; /* hot vermilion */
+        --rule: rgba(22, 20, 18, 0.14);
+        --soft: rgba(22, 20, 18, 0.05);
+        --field: #ece6da;
+        --grain-alpha: 0.4;
+        --grain-blend: multiply;
+        --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+        --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #100e0c;
+          --ink: #ece6dc;
+          --muted: #9a9186;
+          --accent: #e2593b;
+          --rule: rgba(236, 230, 220, 0.16);
+          --soft: rgba(236, 230, 220, 0.06);
+          --field: #1a1713;
+          --grain-alpha: 0.22;
+          --grain-blend: screen;
+          color-scheme: dark;
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        line-height: 1.62;
+        font-feature-settings: "calt" 1;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        overflow-x: clip;
+      }
+      /* Paper grain — fixed SVG turbulence, multiply on cream / screen on dark. */
+      body::after {
+        content: ""; position: fixed; inset: 0; z-index: 100; pointer-events: none;
+        opacity: var(--grain-alpha); mix-blend-mode: var(--grain-blend);
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.4  0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0.4 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      }
+      a { color: var(--ink); text-decoration: none; }
+      a:hover { color: var(--accent); }
+      code, pre, .mono { font-family: var(--font-mono); }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 0 22px; }
+      .serif { font-family: var(--font-display); font-optical-sizing: auto; }
+      .kicker {
+        font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.22em;
+        text-transform: uppercase; color: var(--accent); font-weight: 600;
+      }
+
+      /* --- Masthead nav --- */
+      nav {
+        position: sticky; top: 0; z-index: 20;
+        background: color-mix(in srgb, var(--bg) 90%, transparent);
+        backdrop-filter: blur(6px);
+        border-bottom: 1px solid var(--ink);
+      }
+      nav .wrap { display: flex; align-items: center; gap: 18px; height: 54px; }
+      .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; letter-spacing: 0.02em; }
+      .brand .disc { width: 22px; height: 22px; }
+      nav .links { margin-left: auto; display: flex; gap: 20px; font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; }
+      nav .links a { color: var(--muted); }
+      nav .links a:hover { color: var(--accent); }
+      @media (max-width: 680px) { nav .links { display: none; } }
+
+      /* --- Broadsheet header --- */
+      header.hero { padding: 40px 0 46px; border-bottom: 3px double var(--ink); }
+      .dateline {
+        display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+        letter-spacing: 0.14em; color: var(--muted);
+        padding-bottom: 12px; margin-bottom: 26px; border-bottom: 1px solid var(--rule);
+      }
+      header.hero h1 {
+        font-family: var(--font-display); font-optical-sizing: auto; font-weight: 600;
+        font-size: clamp(40px, 8vw, 84px); line-height: 0.98; letter-spacing: -0.015em;
+        margin: 0 0 20px; max-width: 15ch;
+      }
+      header.hero h1 em { font-style: italic; color: var(--accent); }
+      header.hero .dek {
+        font-size: clamp(17px, 2.3vw, 21px); color: var(--ink); max-width: 62ch; margin: 0 0 30px;
+        border-left: 2px solid var(--accent); padding-left: 16px;
+      }
+      .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px;
+        font-weight: 600; font-size: 14px; border: 1px solid var(--ink); border-radius: 0;
+        font-family: var(--font-sans);
+      }
+      .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .btn.primary:hover { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+      .btn.ghost { background: transparent; color: var(--ink); }
+      .btn.ghost:hover { background: var(--ink); color: var(--bg); }
+
+      /* --- Sections --- */
+      section { padding: 54px 0; border-bottom: 1px solid var(--ink); }
+      section > .wrap > .kicker { display: block; margin-bottom: 10px; }
+      section h2 {
+        font-family: var(--font-display); font-optical-sizing: auto; font-weight: 600;
+        font-size: clamp(26px, 4vw, 38px); line-height: 1.05; letter-spacing: -0.01em; margin: 0 0 10px;
+      }
+      section .sub { color: var(--muted); margin: 0 0 26px; max-width: 66ch; font-size: 16px; }
+      h3 { font-size: 17px; margin: 26px 0 8px; }
+      p { margin: 0 0 14px; }
+      .muted { color: var(--muted); }
+
+      .grid { display: grid; gap: 0; }
+      .grid.cols-3, .grid.cols-2 { border-top: 1px solid var(--ink); border-left: 1px solid var(--ink); }
+      .grid.cols-3 .card, .grid.cols-2 .card { border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+      @media (min-width: 720px) {
+        .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+      }
+      .card { padding: 22px; background: transparent; }
+      .card h3 { margin-top: 0; display: flex; align-items: center; gap: 9px; font-size: 17px; }
+      .card p { color: var(--muted); margin: 0; font-size: 14.5px; }
+      .num {
+        width: 26px; height: 26px; display: grid; place-items: center; flex: none;
+        background: var(--ink); color: var(--bg); font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+      }
+
+      pre {
+        background: var(--ink); color: var(--bg); border: 0; border-radius: 0;
+        padding: 16px 18px; overflow-x: auto; font-size: 13px; line-height: 1.7; margin: 14px 0;
+      }
+      pre .c { color: color-mix(in srgb, var(--bg) 55%, var(--ink)); }
+      p code, li code, td code {
+        background: var(--soft); border: 1px solid var(--rule); border-radius: 0;
+        padding: 1px 6px; font-size: 12.5px;
+      }
+
+      blockquote {
+        font-family: var(--font-display); font-style: italic; font-size: 18px;
+        margin: 12px 0; padding: 10px 0 10px 18px; border-left: 3px solid var(--accent); color: var(--ink);
+      }
+
+      table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; display: block; overflow-x: auto; }
+      th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+      thead th { border-bottom: 2px solid var(--ink); }
+      th { font-family: var(--font-mono); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+      td code { white-space: nowrap; }
+
+      .split { display: grid; gap: 0; border: 1px solid var(--ink); }
+      @media (min-width: 760px) { .split { grid-template-columns: 1fr 1fr; } .split .card:first-child { border-right: 1px solid var(--ink); } }
+      .split .card:first-child { border-bottom: 1px solid var(--ink); }
+      @media (min-width: 760px) { .split .card:first-child { border-bottom: 0; } }
+      .pill {
+        display: inline-block; font-family: var(--font-mono); font-size: 11px; color: var(--ink);
+        background: var(--soft); border: 1px solid var(--ink); padding: 3px 9px; margin: 0 6px 6px 0;
+      }
+
+      footer { padding: 40px 0; text-align: center; color: var(--muted); font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+      footer a { color: var(--muted); }
+      footer a:hover { color: var(--accent); }
+      footer .rule { text-align: center; font-family: var(--font-display); font-style: italic; text-transform: none; letter-spacing: 0; font-size: 15px; color: var(--ink); margin-bottom: 14px; }
+      .deploybtns img { height: 30px; margin: 6px 8px 6px 0; vertical-align: middle; }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute">
+      <symbol id="disc" viewBox="0 0 32 32">
+        <rect width="32" height="32" fill="var(--ink)" />
+        <circle cx="16" cy="16" r="11" fill="none" stroke="var(--bg)" stroke-width="1.4" />
+        <circle cx="16" cy="16" r="4.5" fill="var(--accent)" />
+        <circle cx="16" cy="16" r="1.3" fill="var(--ink)" />
+      </symbol>
+    </svg>
+
+    <nav>
+      <div class="wrap">
+        <span class="brand"><svg class="disc" width="22" height="22"><use href="#disc" /></svg> SUB/WAVE</span>
+        <span class="links">
+          <a href="#start">Quick start</a>
+          <a href="#agents">With agents</a>
+          <a href="#build">Build your own</a>
+          <a href="#api">Station API</a>
+          <a href="https://github.com/getsubwave/web-player">GitHub</a>
+        </span>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="wrap">
+        <div class="dateline">
+          <span>SUB/WAVE · The Field Manual</span>
+          <span>Open Source · MIT</span>
+          <span>getsubwave.com</span>
+        </div>
+        <h1 class="serif">Build your own <em>radio&nbsp;player</em></h1>
+        <p class="dek">
+          A small, forkable reference player for a SUB/WAVE internet radio station. Clone it, restyle
+          it by hand or by describing the vibe to a coding agent, then deploy it. There's also a guide
+          here for building your own player from scratch against the SUB/WAVE public API.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="#start">Get started</a>
+          <a class="btn ghost" href="https://github.com/getsubwave/web-player">★ View on GitHub</a>
+          <a class="btn ghost" href="https://www.getsubwave.com/listen">Hear a live player ↗</a>
+        </div>
+      </div>
+    </header>
+
+    <section id="what">
+      <div class="wrap">
+        <span class="kicker">The premise</span>
+        <h2 class="serif">One stream. Every listener. Your interface.</h2>
+        <p class="sub">
+          <a href="https://github.com/perminder-klair/subwave">SUB/WAVE</a> is a personal internet
+          radio station: one shared Icecast stream, an AI DJ picking tracks and talking between them.
+          Everyone hears the same broadcast at the same time. It's <em>radio</em>, not a playlist.
+          This repo is a reference <strong>web player</strong> for it, built to be gutted and made
+          your own.
+        </p>
+        <div class="grid cols-3">
+          <div class="card">
+            <h3><span class="serif" style="color: var(--accent)">§</span> Full-featured</h3>
+            <p>Now-playing with cover art and acoustic tags, live listener count, the AI DJ's booth feed, song requests, and the weekly schedule.</p>
+          </div>
+          <div class="card">
+            <h3><span class="serif" style="color: var(--accent)">§</span> Forkable by design</h3>
+            <p>The data layer (API client + hooks) is cleanly split from the UI, so you keep the plumbing and rebuild only the look.</p>
+          </div>
+          <div class="card">
+            <h3><span class="serif" style="color: var(--accent)">§</span> Agent-ready</h3>
+            <p>Ships an <code>AGENTS.md</code> and built-in skills, so Claude Code or Cursor already understand how it's wired. Describe the vibe and go.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="start">
+      <div class="wrap">
+        <span class="kicker">Quick start · by hand</span>
+        <h2 class="serif">Clone, run, done.</h2>
+        <p class="sub">React + Vite + TypeScript + Tailwind. It comes pointed at the live public station, so it plays real radio the moment you run it. No config to fill in first.</p>
+        <pre><span class="c"># clone and run</span>
+git clone https://github.com/getsubwave/web-player.git
+cd web-player
+npm install
+npm run dev        <span class="c"># → http://localhost:5173</span></pre>
+        <p class="muted">
+          <code>npm run build</code> produces a static <code>dist/</code> you can host anywhere.
+          Point it at your own station by setting <code>VITE_STATION_URL</code> in a <code>.env</code>
+          file, and everything else derives from that one origin.
+        </p>
+      </div>
+    </section>
+
+    <section id="agents">
+      <div class="wrap">
+        <span class="kicker">Quick start · with agents</span>
+        <h2 class="serif">Describe the look and let the agent build it.</h2>
+        <p class="sub">
+          Would rather just say what you want and let a coding agent write it? The repo is set up for
+          that, and you don't need to know how to code.
+        </p>
+        <div class="grid cols-3">
+          <div class="card">
+            <h3><span class="num">1</span> Hand it the repo</h3>
+            <p>Clone it and open the folder in your agent (Claude Code, Cursor…), or paste the repo URL and ask it to clone.</p>
+          </div>
+          <div class="card">
+            <h3><span class="num">2</span> Describe the look</h3>
+            <p>Talk like a designer, not a programmer. The <code>redesign-player</code> skill keeps the audio and live data working while it restyles.</p>
+          </div>
+          <div class="card">
+            <h3><span class="num">3</span> See it, ship it</h3>
+            <p>Ask the agent to run the dev server, then to deploy it to Vercel, Netlify, or Docker. Keep iterating in plain English.</p>
+          </div>
+        </div>
+        <h3 class="kicker" style="margin-top: 30px">Example prompts</h3>
+        <blockquote>“Restyle this like a warm 70s vinyl setup: cream, burnt orange and brown, chunky rounded panels, a serif logo.”</blockquote>
+        <blockquote>“Make it minimal black-and-white brutalist. Monospace font, hard edges, no shadows.”</blockquote>
+        <blockquote>“Point this at my station at https://radio.mysite.com, then deploy it to Vercel.”</blockquote>
+        <p class="muted">Then keep going: <em>“make the accent pinker”</em>, <em>“bigger cover art”</em>, <em>“move the request box to the top”</em>. You never have to open the code.</p>
+      </div>
+    </section>
+
+    <section id="build">
+      <div class="wrap">
+        <span class="kicker">Guidelines</span>
+        <h2 class="serif">Building your own player</h2>
+        <p class="sub">
+          Building a player from scratch, maybe for the web, a TV, or an e-ink dashboard? Here are the
+          ideas that carry the weight. They hold whether you fork this repo or start fresh in another
+          framework.
+        </p>
+
+        <h3>1. One origin, three things</h3>
+        <p class="muted">Every SUB/WAVE deployment serves the same routes on one hostname. From a single station URL you derive everything:</p>
+        <pre>const API   = `${stationUrl}/api`          <span class="c">// controller JSON</span>
+const AUDIO = `${stationUrl}/stream.mp3`   <span class="c">// Icecast MP3 (universal floor)</span>
+const COVER = `${API}/cover/${subsonicId}` <span class="c">// artwork proxy</span></pre>
+        <p class="muted">Everything is unauthenticated and CORS-open (<code>Access-Control-Allow-Origin: *</code>), and the Icecast mount sends the same, so a browser client can fetch and stream cross-origin from anywhere.</p>
+
+        <h3>2. Poll, don't subscribe</h3>
+        <p class="muted">There's no websocket. Poll <code>/now-playing</code>, <code>/state</code> and <code>/session</code> on a timer (5s is plenty) and render the latest snapshot. Pause polling when the tab is hidden; keep the last good snapshot on a failed fetch so the UI never blanks.</p>
+
+        <h3>3. Respect live-radio rules</h3>
+        <div class="split">
+          <div class="card">
+            <h3 style="margin-top: 0; color: var(--accent)" class="serif">Do</h3>
+            <p>
+              <span class="pill">tune-in on tap</span> browsers block autoplay, so start audio from a user gesture.
+              <span class="pill">an off-air state</span> the track can be <code>null</code> even when online.
+              <span class="pill">optional fields</span> a fresh track has no BPM/mood; a jingle has no cover.
+            </p>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0; color: var(--accent)" class="serif">Don't</h3>
+            <p>
+              <span class="pill">no skip / next</span> one shared stream, so skipping would skip for everyone.
+              <span class="pill">no seek bar</span> the playhead is client-side and approximate.
+              <span class="pill">no per-listener shuffle</span> it's a broadcast, not a queue you own.
+            </p>
+          </div>
+        </div>
+
+        <h3 style="margin-top: 28px">4. Split data from presentation</h3>
+        <p class="muted">The thing that makes a player easy to restyle: keep all fetching and audio in one thin layer (a client + a few hooks), and let the UI be a pure function of that data. Then a redesign never touches the plumbing. In this repo that's <code>src/lib/</code> + <code>src/hooks/</code> (keep) vs <code>src/components/</code> (rewrite).</p>
+      </div>
+    </section>
+
+    <section id="api">
+      <div class="wrap">
+        <span class="kicker">Reference</span>
+        <h2 class="serif">Station API</h2>
+        <p class="sub">The public surface a player consumes. Base is <code>${stationUrl}/api</code>; the stream is at <code>${stationUrl}/stream.mp3</code>.</p>
+        <table>
+          <thead><tr><th>Endpoint</th><th>Returns / powers</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /now-playing</code></td><td>Current track + cover art + acoustic tags (genre·BPM·key·mood·energy), on-air DJ persona + show + guests, listener count, stream bitrate, LLM token ticker.</td></tr>
+            <tr><td><code>GET /state</code></td><td>Queue (up next) + history (recently played) + DJ log.</td></tr>
+            <tr><td><code>GET /session</code></td><td>The Booth feed: the live DJ session's chat turns (what the AI DJ said/queued).</td></tr>
+            <tr><td><code>GET /schedule</code></td><td>The weekly 7×24 grid + shows + personas, in station-local time.</td></tr>
+            <tr><td><code>POST /request</code></td><td>Submit a plain-language song request → returns a <code>requestId</code>.</td></tr>
+            <tr><td><code>GET /request/:id</code></td><td>Poll a request's outcome (<code>pending</code> / <code>resolved</code> / <code>failed</code>).</td></tr>
+            <tr><td><code>GET /cover/:id</code></td><td>Cover-art proxy (safe for lock-screen artwork).</td></tr>
+            <tr><td><code>GET /health</code></td><td>Liveness. Returns <code>{"status":"on-air"}</code>.</td></tr>
+            <tr><td><code>GET /stream.mp3</code></td><td>The audio itself (Icecast; not under <code>/api</code>).</td></tr>
+          </tbody>
+        </table>
+        <p class="muted">Optional mounts appear when the operator enables them: <code>/stream.opus</code>, <code>/stream.flac</code>, <code>/stream.aac</code>. MP3 is always served.</p>
+      </div>
+    </section>
+
+    <section id="deploy">
+      <div class="wrap">
+        <span class="kicker">Ship it</span>
+        <h2 class="serif">Deploy</h2>
+        <p class="sub">It's a static SPA, so it goes to any static host in one click. Or run it as a container.</p>
+        <p class="deploybtns">
+          <a href="https://vercel.com/new/clone?repository-url=https://github.com/getsubwave/web-player"><img alt="Deploy with Vercel" src="https://vercel.com/button" /></a>
+          <a href="https://app.netlify.com/start/deploy?repository=https://github.com/getsubwave/web-player"><img alt="Deploy to Netlify" src="https://www.netlify.com/img/deploy/button.svg" /></a>
+          <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/getsubwave/web-player"><img alt="Deploy to Cloudflare" src="https://deploy.workers.cloudflare.com/button" /></a>
+        </p>
+        <pre><span class="c"># or with Docker</span>
+docker compose up -d --build   <span class="c"># → http://localhost:8080</span></pre>
+        <p class="muted"><code>VITE_STATION_URL</code> is baked in at build time, so set it as a build arg or env var to lock a deployment to your own station, then rebuild.</p>
+      </div>
+    </section>
+
+    <footer>
+      <div class="wrap">
+        <p class="rule">“Clone it, gut it, ship your own.”</p>
+        <p>
+          <a href="https://github.com/getsubwave/web-player">Repository</a> ·
+          <a href="https://www.getsubwave.com">SUB/WAVE</a> ·
+          <a href="https://www.getsubwave.com/listen">Live player</a> ·
+          <a href="https://github.com/perminder-klair/subwave">Station software</a>
+        </p>
+        <p>MIT licensed</p>
+      </div>
+    </footer>
+  </body>
+</html>
