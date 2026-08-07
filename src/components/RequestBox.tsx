@@ -3,16 +3,19 @@
 // and works it into the flow. The POST returns instantly and we poll for the
 // outcome, so this shows a live "finding your track…" → resolved/failed card.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useRequest } from '@/hooks/useRequest';
 import { Panel } from '@/components/ui/Panel';
 
 export function RequestBox() {
   const [text, setText] = useState('');
   const [name, setName] = useState('');
+  const requestId = useId();
+  const nameId = useId();
   const { state, submit, reset } = useRequest();
 
   const busy = state.phase === 'submitting' || state.phase === 'pending';
+  const failed = state.phase === 'done' && state.status === 'failed';
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +29,11 @@ export function RequestBox() {
     <Panel title="Request a track" className="h-full">
       <div className="flex h-full flex-col p-4 sm:p-5">
         <form onSubmit={onSubmit} className="space-y-3">
+          <label htmlFor={requestId} className="block text-xs font-medium text-[var(--fg)]">
+            Song, artist, or vibe
+          </label>
           <input
+            id={requestId}
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Play something… (artist, song, or a vibe)"
@@ -34,15 +41,22 @@ export function RequestBox() {
             disabled={busy}
             className="w-full rounded-xl border border-white/15 bg-black/25 px-3.5 py-3 text-sm text-[var(--fg)] shadow-inner shadow-black/20 placeholder:text-[var(--muted)] focus:border-[var(--signal)] focus:outline-none focus:ring-2 focus:ring-[var(--signal)]/20 disabled:cursor-not-allowed disabled:opacity-60"
           />
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name (optional)"
-              maxLength={40}
-              disabled={busy}
-              className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/25 px-3.5 py-2.5 text-sm text-[var(--fg)] shadow-inner shadow-black/20 placeholder:text-[var(--muted)] focus:border-[var(--signal)] focus:outline-none focus:ring-2 focus:ring-[var(--signal)]/20 disabled:cursor-not-allowed disabled:opacity-60"
-            />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label
+              htmlFor={nameId}
+              className="min-w-0 flex-1 text-xs font-medium text-[var(--fg)]"
+            >
+              Your name <span className="font-normal text-[var(--muted)]">(optional)</span>
+              <input
+                id={nameId}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name (optional)"
+                maxLength={40}
+                disabled={busy}
+                className="mt-1.5 w-full min-w-0 rounded-xl border border-white/15 bg-black/25 px-3.5 py-2.5 text-sm font-normal text-[var(--fg)] shadow-inner shadow-black/20 placeholder:text-[var(--muted)] focus:border-[var(--signal)] focus:outline-none focus:ring-2 focus:ring-[var(--signal)]/20 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </label>
             <button
               type="submit"
               disabled={busy || !text.trim()}
@@ -54,7 +68,13 @@ export function RequestBox() {
         </form>
 
         {/* Outcome */}
-        <div className="mt-4 flex-1">
+        <div
+          className="mt-4 flex-1"
+          role={failed ? 'alert' : 'status'}
+          aria-live="polite"
+          aria-atomic="true"
+          aria-relevant="additions text"
+        >
           {state.phase === 'pending' && (
             <p className="rounded-xl border border-[var(--signal)]/25 bg-[var(--signal)]/8 p-3 text-sm text-[var(--signal)]">
               🎧 Finding your track…

@@ -14,7 +14,7 @@ function Row({ entry, muted, ordinal }: { entry: QueueEntry; muted?: boolean; or
         muted ? 'border-b border-[var(--line)] py-2.5 opacity-70' : 'rounded-xl border border-[var(--line)] bg-white/[0.025] p-3'
       }`}
     >
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {ordinal != null && (
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--signal)]/25 bg-[var(--signal)]/10 text-[10px] font-bold text-[var(--signal)]">
             {String(ordinal).padStart(2, '0')}
@@ -31,9 +31,13 @@ function Row({ entry, muted, ordinal }: { entry: QueueEntry; muted?: boolean; or
           </p>
         </div>
       </div>
-      <div className="shrink-0 text-right">
+      <div className="min-w-0 max-w-[42%] shrink text-right sm:max-w-[50%]">
         {entry.requestedBy && (
-          <span className="rounded-full border border-[var(--signal)]/15 bg-[var(--signal)]/8 px-2 py-0.5 text-[10px] text-[var(--signal)]">
+          <span
+            className="block max-w-full truncate rounded-full border border-[var(--signal)]/15 bg-[var(--signal)]/8 px-2 py-0.5 text-[10px] text-[var(--signal)]"
+            title={entry.requestedBy}
+            aria-label={`Requested by ${entry.requestedBy}`}
+          >
             ♥ {entry.requestedBy}
           </span>
         )}

@@ -62,49 +62,77 @@ export function Schedule() {
           </p>
         ) : (
           <div className="min-w-[560px]">
-            {/* Hour axis */}
-            <div className="grid grid-cols-[36px_repeat(24,1fr)] gap-px border-b border-[var(--line)] pb-1">
-              <div />
-              {HOURS.map((h) => (
-                <div
-                  key={h}
-                  className={`rounded-sm pb-1 text-center text-[9px] ${h === now.hour ? 'bg-[var(--signal)]/10 font-semibold text-[var(--signal)]' : 'text-[var(--muted)]'}`}
-                >
-                  {h % 3 === 0 ? hourLabel(h) : ''}
-                </div>
-              ))}
-            </div>
-            {/* Rows */}
-            {DAYS.map((d) => {
-              const row = data.schedule?.[d] ?? [];
-              return (
-                <div key={d} className="grid grid-cols-[36px_repeat(24,1fr)] items-center gap-px py-px">
-                  <div className="pr-1 text-right text-[10px] font-medium text-[var(--muted)]">
-                    {dayName(d)}
-                  </div>
-                  {HOURS.map((h) => {
-                    const showId = row[h] ?? null;
-                    const show = showId ? showsById.get(showId) : null;
-                    const isNow = d === now.dow && h === now.hour;
-                    return (
-                      <div
-                        key={h}
-                        title={show ? `${show.name} · ${hourLabel(h)}` : hourLabel(h)}
-                        className={`h-6 rounded-[3px] border ${show ? 'border-white/10' : 'border-white/[0.025]'} ${isNow ? 'relative z-10 ring-2 ring-[var(--signal)] ring-offset-1 ring-offset-[var(--panel)]' : ''}`}
-                        style={{
-                          background: isNow
-                            ? `${show ? 'linear-gradient(rgb(199 243 107 / 0.18), rgb(199 243 107 / 0.18)), ' : ''}${show ? gradientFor(show.id) : 'rgb(199 243 107 / 0.16)'}`
-                            : show
-                              ? gradientFor(show.id)
-                              : 'var(--panel-2)',
-                          opacity: show || isNow ? 1 : 0.22,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })}
+            <table className="w-full table-fixed border-separate border-spacing-x-px border-spacing-y-0">
+              <caption className="sr-only">
+                Weekly station schedule. Each focusable slot identifies its day, hour, show, and whether it is current.
+              </caption>
+              <colgroup>
+                <col className="w-9" />
+                {HOURS.map((h) => (
+                  <col key={h} />
+                ))}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" className="border-b border-[var(--line)] pb-1">
+                    <span className="sr-only">Day</span>
+                  </th>
+                  {HOURS.map((h) => (
+                    <th
+                      key={h}
+                      scope="col"
+                      aria-label={hourLabel(h)}
+                      className={`rounded-sm border-b border-[var(--line)] pb-1 text-center text-[9px] font-normal ${h === now.hour ? 'bg-[var(--signal)]/10 font-semibold text-[var(--signal)]' : 'text-[var(--muted)]'}`}
+                    >
+                      {h % 3 === 0 ? hourLabel(h) : <span aria-hidden="true">&nbsp;</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((d) => {
+                  const row = data.schedule?.[d] ?? [];
+                  const day = dayName(d);
+                  return (
+                    <tr key={d}>
+                      <th
+                        scope="row"
+                        className="h-7 pr-1 text-right text-[10px] font-medium text-[var(--muted)]"
+                      >
+                        {day}
+                      </th>
+                      {HOURS.map((h) => {
+                        const showId = row[h] ?? null;
+                        const show = showId ? showsById.get(showId) : null;
+                        const isNow = d === now.dow && h === now.hour;
+                        const slotTitle = show ? `${show.name} · ${hourLabel(h)}` : hourLabel(h);
+                        const slotLabel = `${day}, ${hourLabel(h)}: ${show?.name ?? 'No show scheduled'}${isNow ? ', current slot' : ''}`;
+                        return (
+                          <td
+                            key={h}
+                            tabIndex={0}
+                            title={slotTitle}
+                            aria-label={slotLabel}
+                            aria-current={isNow ? 'time' : undefined}
+                            className={`h-6 rounded-[3px] border p-0 focus-visible:relative focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--signal)] ${show ? 'border-white/10' : 'border-white/[0.025]'} ${isNow ? 'relative z-10 ring-2 ring-[var(--signal)] ring-offset-1 ring-offset-[var(--panel)]' : ''}`}
+                            style={{
+                              background: isNow
+                                ? `${show ? 'linear-gradient(rgb(199 243 107 / 0.18), rgb(199 243 107 / 0.18)), ' : ''}${show ? gradientFor(show.id) : 'rgb(199 243 107 / 0.16)'}`
+                                : show
+                                  ? gradientFor(show.id)
+                                  : 'var(--panel-2)',
+                              opacity: show || isNow ? 1 : 0.22,
+                            }}
+                          >
+                            <span className="sr-only">{slotLabel}</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
 
             {/* Legend */}
             {data.shows.length > 0 && (
