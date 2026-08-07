@@ -48,6 +48,7 @@ export function usePlayer(): Player {
   const qualityRef = useRef<StreamQuality | null>(null);
   const fallbackAttemptedRef = useRef(false);
   const playbackStartedRef = useRef(false);
+  const sourceAttemptRef = useRef(0);
 
   // Create the element once. It lives for the app's lifetime.
   useEffect(() => {
@@ -59,6 +60,7 @@ export function usePlayer(): Player {
 
     const onPlaying = () => {
       playbackStartedRef.current = true;
+      setTunedIn(true);
       setPlaying(true);
       setLoading(false);
     };
@@ -71,11 +73,12 @@ export function usePlayer(): Player {
         !fallbackAttemptedRef.current
       ) {
         fallbackAttemptedRef.current = true;
+        const fallbackAttempt = ++sourceAttemptRef.current;
         qualityRef.current = 'mp3';
         el.src = `${config.mp3StreamUrl}?t=${Date.now()}`;
         setQuality('mp3');
         void el.play().catch(() => {
-          if (qualityRef.current !== 'mp3') return;
+          if (sourceAttemptRef.current !== fallbackAttempt) return;
           setPlaying(false);
           setLoading(false);
         });
@@ -91,6 +94,7 @@ export function usePlayer(): Player {
     el.addEventListener('error', onError);
 
     return () => {
+      sourceAttemptRef.current += 1;
       el.pause();
       el.removeEventListener('playing', onPlaying);
       el.removeEventListener('pause', onPause);
@@ -110,6 +114,7 @@ export function usePlayer(): Player {
   }, [volume, muted]);
 
   function play() {
+    const sourceAttempt = ++sourceAttemptRef.current;
     const el = audioRef.current;
     if (!el) return;
     fallbackAttemptedRef.current = false;
@@ -123,19 +128,16 @@ export function usePlayer(): Player {
     el.src = `${streamUrl}?t=${Date.now()}`;
     setQuality(selectedQuality);
     setLoading(true);
-    el.play()
-      .then(() => {
-        setTunedIn(true);
-      })
-      .catch(() => {
-        if (qualityRef.current !== selectedQuality) return;
-        // Autoplay blocked or network error — surface as "not playing".
-        setLoading(false);
-        setPlaying(false);
-      });
+    void el.play().catch(() => {
+      if (sourceAttemptRef.current !== sourceAttempt) return;
+      // Autoplay blocked or network error — surface as "not playing".
+      setLoading(false);
+      setPlaying(false);
+    });
   }
 
   function stop() {
+    sourceAttemptRef.current += 1;
     const el = audioRef.current;
     if (!el) return;
     el.pause();
