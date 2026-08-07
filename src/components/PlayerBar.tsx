@@ -100,7 +100,7 @@ export function PlayerBar({ player }: { player: Player }) {
 
         {qualityLabel && (
           <div
-            className="w-fit rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]"
+            className="w-fit rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-[var(--muted)]"
             aria-live="polite"
           >
             {qualityLabel}
