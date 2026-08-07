@@ -16,3 +16,6 @@ dist-ssr
 logs
 *.log
 npm-debug.log*
+
+# Local isolated git worktrees
+.worktrees/
