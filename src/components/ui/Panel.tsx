@@ -17,7 +17,7 @@ export function Panel({
 }) {
   return (
     <section
-      className={`flex min-h-0 flex-col overflow-hidden rounded-[1.25rem] border border-[var(--line)] bg-[var(--panel)] shadow-[0_18px_60px_rgb(0_0_0/0.18)] backdrop-blur-xl transition-[border-color,box-shadow] focus-within:border-[var(--signal)] focus-within:shadow-[0_18px_60px_rgb(0_0_0/0.24)] ${className}`}
+      className={`flex min-h-0 flex-col rounded-[1.25rem] border border-[var(--line)] bg-[var(--panel)] shadow-[0_18px_60px_rgb(0_0_0/0.18)] backdrop-blur-xl transition-[border-color,box-shadow] focus-within:border-[var(--signal)] focus-within:shadow-[0_18px_60px_rgb(0_0_0/0.24)] ${className}`}
     >
       <header className="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">

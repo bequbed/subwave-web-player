@@ -85,7 +85,10 @@ function PlayerView() {
           <section aria-label="The Booth" className="h-[26rem] lg:col-span-8 lg:h-[28rem]">
             <BoothFeed />
           </section>
-          <aside aria-label="Request a track" className="h-[22rem] lg:col-span-4 lg:h-[28rem]">
+          <aside
+            aria-label="Request a track"
+            className="min-h-[22rem] lg:col-span-4 lg:min-h-[28rem]"
+          >
             <RequestBox />
           </aside>
           <aside aria-label="On the Deck" className="h-[24rem] lg:col-span-4 lg:h-[25rem]">

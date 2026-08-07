@@ -17,32 +17,34 @@ export function OnAir() {
   const guests = show?.guests ?? [];
 
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
+    <div className="flex min-w-0 items-start gap-2.5">
       <div className="relative shrink-0">
         <Avatar src={hostAvatar} name={hostName} size={38} />
-        <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-[var(--signal)] px-1.5 py-px text-[8px] font-black uppercase tracking-[0.12em] text-[var(--bg)] ring-2 ring-[var(--bg)]">
+        <span className="absolute -bottom-0.5 -right-0.5 whitespace-nowrap rounded-full bg-[var(--signal)] px-1 py-px text-[11px] font-black leading-none uppercase tracking-[0.08em] text-[var(--bg)] ring-2 ring-[var(--bg)]">
           On&nbsp;air
         </span>
       </div>
 
       <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm font-semibold leading-tight">{hostName}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className="min-w-0 break-words text-sm font-semibold leading-tight">{hostName}</span>
           {show?.name && (
-            <span className="inline-block max-w-20 truncate rounded-full border border-[var(--line)] bg-[var(--panel)] px-1.5 py-0.5 text-[9px] text-[var(--muted)] sm:max-w-28">
+            <span className="max-w-full break-words rounded-full border border-[var(--line)] bg-[var(--panel)] px-1.5 py-0.5 text-[11px] leading-tight text-[var(--muted)]">
               {show.name}
             </span>
           )}
         </div>
 
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <p className="truncate text-[10px] leading-tight text-[var(--muted)]">
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="min-w-0 flex-1 basis-32 break-words text-xs leading-snug text-[var(--muted)]">
             {tagline || (guests.length === 0 ? 'Live radio' : show?.name || 'Live radio')}
           </p>
           {guests.length > 0 && (
-            <div className="flex shrink-0 items-center gap-1">
-              <span className="text-[8px] uppercase tracking-wide text-[var(--muted)]">with</span>
-              <div className="flex -space-x-1.5">
+            <div className="flex max-w-full flex-wrap items-center gap-x-1 gap-y-1">
+              <span className="text-[11px] uppercase leading-none tracking-wide text-[var(--muted)]">
+                with
+              </span>
+              <div className="flex max-w-full flex-wrap gap-0.5">
                 {guests.map((guest) => (
                   <Avatar
                     key={guest.id}
