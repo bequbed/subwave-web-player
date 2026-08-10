@@ -157,8 +157,12 @@ export function PlayerBar({ player }: { player: Player }) {
             : cast.receiverState === 'idle'
               ? 'waiting for stream'
               : 'connecting';
+  // 'live' only ever appears if the watchdog had to re-load in the other
+  // stream mode, so showing it is worth the extra words — it says which path
+  // the receiver actually accepted.
+  const castMode = cast.streamMode === 'live' ? ' (live mode)' : '';
   const stateDetail = casting
-    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}`
+    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}`
     : playing
       ? 'Live signal connected'
       : tunedIn

@@ -91,6 +91,9 @@ declare global {
     contentType: string;
     streamType: string;
     metadata: CastMusicTrackMetadata | null;
+    /** Seconds. -1 marks an endless stream so the receiver never derives a
+     *  duration (and therefore a seekable window) from the HTTP response. */
+    duration: number | null;
   }
 
   interface CastMusicTrackMetadata {
@@ -103,5 +106,11 @@ declare global {
 
   interface CastLoadRequest {
     media: CastMediaInfo;
+    /** Constructor default is already true; set explicitly so the intent
+     *  survives any SDK change. */
+    autoplay: boolean;
+    /** Seconds to start at. Pinning this to 0 keeps the receiver on the
+     *  progressive read it can actually serve, instead of a seek. */
+    currentTime: number | null;
   }
 }
