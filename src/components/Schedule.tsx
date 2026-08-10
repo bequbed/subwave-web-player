@@ -2,12 +2,25 @@
 // anchored to a show. Times are painted in the STATION's timezone (the DJ
 // speaks in that zone), so we compute "now" in that zone to highlight the live
 // slot rather than trusting the viewer's local clock.
+//
+// LONGWAVE prints this as a chart: zebra banding, hairline cells, muted
+// per-show tints, and the live hour as a solid ember fill with paper text.
+// It stays a semantic <table> with all 168 slots focusable.
 
 import { useMemo } from 'react';
 import { useSchedule } from '@/hooks/useSchedule';
 import { Panel } from '@/components/ui/Panel';
-import { dayName, gradientFor, hourLabel } from '@/lib/format';
+import { dayName, hourLabel } from '@/lib/format';
 import type { ScheduleShow } from '@/lib/types';
+
+/** A deterministic, desaturated tint per show — printed-chart ink, not neon.
+ *  Local to the presentation layer; `gradientFor` stays for the dark-friendly
+ *  avatar fallbacks. */
+function showTint(seed: string): string {
+  let h = 0;
+  for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h} 26% 80%)`;
+}
 
 /** Current { dow (0=Sun), hour } in an IANA timezone, via Intl. Falls back to
  *  the viewer's local time if the zone is missing/invalid. */
@@ -48,107 +61,132 @@ export function Schedule() {
       title="Weekly schedule"
       aside={
         data?.timezone ? (
-          <span className="text-[10px] text-[var(--muted)]">station time · {data.timezone}</span>
+          <span className="truncate text-[11px] text-[var(--pencil)]">
+            station time · {data.timezone}
+          </span>
         ) : undefined
       }
-      className="h-full overflow-hidden"
+      className="h-full"
     >
-      <div className="scroll-thin h-full overflow-auto p-3 sm:p-4">
+      <div className="flex h-full min-w-0 flex-col">
         {loading ? (
-          <p className="py-8 text-center text-sm text-[var(--muted)]">Loading schedule…</p>
+          <p className="py-8 text-center text-sm text-[var(--pencil)]">Loading schedule…</p>
         ) : error || !data ? (
-          <p className="py-8 text-center text-sm text-[var(--muted)]">
+          <p className="py-8 text-center text-sm text-[var(--pencil)]">
             No schedule available for this station.
           </p>
         ) : (
-          <div className="min-w-[560px]">
-            <table className="w-full table-fixed border-separate border-spacing-x-px border-spacing-y-0">
-              <caption className="sr-only">
-                Weekly station schedule. Each focusable slot identifies its day, hour, show, and whether it is current.
-              </caption>
-              <colgroup>
-                <col className="w-9" />
-                {HOURS.map((h) => (
-                  <col key={h} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th scope="col" className="border-b border-[var(--line)] pb-1">
-                    <span className="sr-only">Day</span>
-                  </th>
-                  {HOURS.map((h) => (
-                    <th
-                      key={h}
-                      scope="col"
-                      aria-label={hourLabel(h)}
-                      className={`rounded-sm border-b border-[var(--line)] pb-1 text-center text-[9px] font-normal ${h === now.hour ? 'bg-[var(--signal)]/10 font-semibold text-[var(--signal)]' : 'text-[var(--muted)]'}`}
-                    >
-                      {h % 3 === 0 ? hourLabel(h) : <span aria-hidden="true">&nbsp;</span>}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {DAYS.map((d) => {
-                  const row = data.schedule?.[d] ?? [];
-                  const day = dayName(d);
-                  return (
-                    <tr key={d}>
-                      <th
-                        scope="row"
-                        className="h-7 pr-1 text-right text-[10px] font-medium text-[var(--muted)]"
-                      >
-                        {day}
+          <>
+            {/* The grid scrolls inside this panel only — never widening the page. */}
+            <div className="scroll-thin min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4">
+              {/* `relative` is load-bearing: the per-slot `sr-only` spans are
+                  absolutely positioned, and without a positioned ancestor
+                  inside this scroller their containing block would be #root —
+                  which leaks the 720px grid out and widens the whole page at
+                  320px. */}
+              <div className="relative min-w-[720px]">
+                <table className="w-full table-fixed border-separate border-spacing-x-px border-spacing-y-0">
+                  <caption className="sr-only">
+                    Weekly station schedule. Each focusable slot identifies its day, hour, show, and whether it is current.
+                  </caption>
+                  <colgroup>
+                    <col className="w-11" />
+                    {HOURS.map((h) => (
+                      <col key={h} />
+                    ))}
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th scope="col" className="border-b border-[var(--rule)] pb-1.5">
+                        <span className="sr-only">Day</span>
                       </th>
-                      {HOURS.map((h) => {
-                        const showId = row[h] ?? null;
-                        const show = showId ? showsById.get(showId) : null;
-                        const isNow = d === now.dow && h === now.hour;
-                        const slotTitle = show ? `${show.name} · ${hourLabel(h)}` : hourLabel(h);
-                        const slotLabel = `${day}, ${hourLabel(h)}: ${show?.name ?? 'No show scheduled'}${isNow ? ', current slot' : ''}`;
-                        return (
-                          <td
-                            key={h}
-                            tabIndex={0}
-                            title={slotTitle}
-                            aria-label={slotLabel}
-                            aria-current={isNow ? 'time' : undefined}
-                            className={`h-6 rounded-[3px] border p-0 focus-visible:relative focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--signal)] ${show ? 'border-white/10' : 'border-white/[0.025]'} ${isNow ? 'relative z-10 ring-2 ring-[var(--signal)] ring-offset-1 ring-offset-[var(--panel)]' : ''}`}
-                            style={{
-                              background: isNow
-                                ? `${show ? 'linear-gradient(rgb(199 243 107 / 0.18), rgb(199 243 107 / 0.18)), ' : ''}${show ? gradientFor(show.id) : 'rgb(199 243 107 / 0.16)'}`
-                                : show
-                                  ? gradientFor(show.id)
-                                  : 'var(--panel-2)',
-                              opacity: show || isNow ? 1 : 0.22,
-                            }}
-                          >
-                            <span className="sr-only">{slotLabel}</span>
-                          </td>
-                        );
-                      })}
+                      {HOURS.map((h) => (
+                        <th
+                          key={h}
+                          scope="col"
+                          aria-label={hourLabel(h)}
+                          className={`border-b border-[var(--rule)] pb-1.5 text-center text-[11px] tabular-nums ${
+                            h === now.hour
+                              ? 'font-semibold text-[var(--ember)]'
+                              : 'font-normal text-[var(--pencil)]'
+                          }`}
+                        >
+                          {h % 3 === 0 ? hourLabel(h) : <span aria-hidden="true">&nbsp;</span>}
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {DAYS.map((d) => {
+                      const row = data.schedule?.[d] ?? [];
+                      const day = dayName(d);
+                      const zebra = d % 2 === 1;
+                      return (
+                        <tr key={d}>
+                          <th
+                            scope="row"
+                            className="h-7 pr-2 text-right text-[11px] font-medium text-[var(--pencil)]"
+                          >
+                            {day}
+                          </th>
+                          {HOURS.map((h) => {
+                            const showId = row[h] ?? null;
+                            const show = showId ? showsById.get(showId) : null;
+                            const isNow = d === now.dow && h === now.hour;
+                            const slotTitle = show ? `${show.name} · ${hourLabel(h)}` : hourLabel(h);
+                            const slotLabel = `${day}, ${hourLabel(h)}: ${show?.name ?? 'No show scheduled'}${isNow ? ', current slot' : ''}`;
+                            return (
+                              <td
+                                key={h}
+                                tabIndex={0}
+                                title={slotTitle}
+                                aria-label={slotLabel}
+                                aria-current={isNow ? 'time' : undefined}
+                                className={`h-6 rounded-[2px] border p-0 focus-visible:relative focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ember)] ${
+                                  isNow || show ? 'border-[var(--rule)]' : 'border-transparent'
+                                }`}
+                                style={{
+                                  background: isNow
+                                    ? 'var(--ember)'
+                                    : show
+                                      ? showTint(show.id)
+                                      : zebra
+                                        ? 'var(--leaf-raised)'
+                                        : 'color-mix(in srgb, var(--leaf-raised) 45%, var(--leaf))',
+                                  color: isNow ? 'var(--paper)' : undefined,
+                                }}
+                              >
+                                <span className="sr-only">{slotLabel}</span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-            {/* Legend */}
+            {/* Legend — outside the scroller so it wraps to the panel width. */}
             {data.shows.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-x-3 gap-y-2 border-t border-[var(--line)] pt-3">
+              <div className="flex shrink-0 flex-wrap gap-x-4 gap-y-2 border-t border-[var(--rule)] px-3 py-3 sm:px-4">
                 {data.shows.slice(0, 8).map((s) => (
-                  <span key={s.id} className="flex items-center gap-1.5 text-[11px] text-[var(--fg)]/75">
+                  <span
+                    key={s.id}
+                    className="flex min-w-0 items-center gap-2 text-[11px] text-[var(--pencil)]"
+                  >
                     <span
-                      className="inline-block h-3 w-3 rounded-[3px] border border-white/15"
-                      style={{ background: gradientFor(s.id) }}
+                      aria-hidden="true"
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-[2px] border border-[var(--rule)]"
+                      style={{ background: showTint(s.id) }}
                     />
-                    {s.name}
+                    <span className="truncate">{s.name}</span>
                   </span>
                 ))}
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </Panel>

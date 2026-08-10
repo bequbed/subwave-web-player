@@ -23,7 +23,7 @@ export function Avatar({
   const showImg = src && !failed;
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white/90 ring-1 ring-[var(--line)]"
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-semibold text-[var(--paper)] ring-1 ring-[var(--rule)]"
       style={{ width: size, height: size, background: gradientFor(name) }}
       aria-hidden={!name}
     >
