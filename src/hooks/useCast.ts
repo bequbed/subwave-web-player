@@ -24,6 +24,10 @@ import { useStationFeed } from '@/hooks/useStationFeed';
 
 export type CastState = 'unavailable' | 'idle' | 'connecting' | 'connected';
 
+/** What the receiver reports about the loaded stream, polled while connected.
+ *  'unknown' before the first status arrives (or while not casting). */
+export type ReceiverState = 'unknown' | 'idle' | 'buffering' | 'playing' | 'paused' | 'ended';
+
 /** Google's built-in Default Media Receiver — usable without any registration
  *  or API keys (https://developers.google.com/cast/docs/web_sender). */
 const DEFAULT_RECEIVER_APP_ID = 'CC1AD845';
@@ -70,6 +74,9 @@ export interface Cast {
   state: CastState;
   /** Friendly name of the receiving device while connected. */
   deviceName: string | null;
+  /** Receiver-reported media state ('playing'/'buffering'/'idle'...), polled
+   *  once a second while a session is active. */
+  receiverState: ReceiverState;
   /** True when the cast button should render. */
   supported: boolean;
   /** Open the device picker and start the stream on the chosen speaker. */
@@ -82,6 +89,7 @@ export function useCast(): Cast {
   const { nowPlaying } = useStationFeed();
   const [state, setState] = useState<CastState>('unavailable');
   const [deviceName, setDeviceName] = useState<string | null>(null);
+  const [receiverState, setReceiverState] = useState<ReceiverState>('unknown');
   // Monotonic operation tokens: invalidated on every stop/start so a stale
   // requestSession/loadMedia from an earlier attempt can never touch a session
   // it doesn't own (e.g. ending the session a newer attempt just started).
@@ -239,6 +247,41 @@ export function useCast(): Cast {
     };
   }, []);
 
+  // While a session is active, poll the receiver's media state once a second.
+  // This is the ground truth for "connected but silent": IDLE means the load
+  // was accepted but the receiver isn't playing it; BUFFERING forever means
+  // its fetch of the stream URL is stalling; PLAYING means audio should be
+  // audible (and any silence is device-side).
+  useEffect(() => {
+    if (state !== 'connected') {
+      setReceiverState('unknown');
+      return;
+    }
+    const framework = window.cast?.framework;
+    if (!framework) return;
+    const context = framework.CastContext.getInstance();
+    const poll = () => {
+      const media = context.getCurrentSession()?.getMediaSession();
+      const ps = media?.playerState;
+      setReceiverState(
+        ps === 'PLAYING'
+          ? 'playing'
+          : ps === 'BUFFERING'
+            ? 'buffering'
+            : ps === 'PAUSED'
+              ? 'paused'
+              : ps === 'IDLE'
+                ? 'idle'
+                : ps === 'ENDED'
+                  ? 'ended'
+                  : 'unknown',
+      );
+    };
+    poll();
+    const timer = window.setInterval(poll, 1000);
+    return () => window.clearInterval(timer);
+  }, [state]);
+
   async function startCast(): Promise<void> {
     const framework = window.cast?.framework;
     const cc = chromeCast();
@@ -300,6 +343,7 @@ export function useCast(): Cast {
   return {
     state,
     deviceName,
+    receiverState,
     supported: state !== 'unavailable',
     cast: startCast,
     stop: stopCast,

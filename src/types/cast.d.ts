@@ -61,6 +61,13 @@ declare global {
   interface CastSession {
     loadMedia(request: CastLoadRequest): Promise<string | null>;
     getSessionObj(): { receiver: { friendlyName: string } };
+    /** Live media status on the receiver, or null before a load is in flight. */
+    getMediaSession(): CastMediaSession | null;
+  }
+
+  interface CastMediaSession {
+    /** 'IDLE' | 'BUFFERING' | 'PAUSED' | 'PLAYING' | 'ENDED' */
+    playerState: string;
   }
 
   /** Legacy `chrome.cast` model — the classes loadMedia() consumes. */

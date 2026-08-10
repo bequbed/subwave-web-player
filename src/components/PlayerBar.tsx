@@ -143,8 +143,22 @@ export function PlayerBar({ player }: { player: Player }) {
           : tunedIn
             ? 'Paused'
             : 'Ready to listen';
+  // Receiver-reported media state while casting — the ground truth for
+  // "connected but silent" (idle = load accepted, not playing).
+  const receiverStatus =
+    cast.receiverState === 'playing'
+      ? 'playing'
+      : cast.receiverState === 'buffering'
+        ? 'buffering…'
+        : cast.receiverState === 'paused'
+          ? 'paused'
+          : cast.receiverState === 'ended'
+            ? 'stream ended'
+            : cast.receiverState === 'idle'
+              ? 'waiting for stream'
+              : 'connecting';
   const stateDetail = casting
-    ? `Casting to ${cast.deviceName ?? 'speaker'}`
+    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}`
     : playing
       ? 'Live signal connected'
       : tunedIn
