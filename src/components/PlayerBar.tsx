@@ -107,8 +107,13 @@ export function PlayerBar({ player }: { player: Player }) {
   const level = muted || volume === 0 ? 'mute' : volume < 0.5 ? 'low' : 'high';
 
   return (
-    <div className="sticky bottom-0 z-30 -mx-6 border-y border-[var(--rule)] bg-[var(--paper)] px-6 py-3.5 shadow-[var(--plate-shadow)] sm:-mx-10 sm:px-10 lg:static lg:mx-0 lg:px-0 lg:py-5 lg:shadow-none">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+    // Below `lg` the rail is pinned to the viewport, not to a section. Sticky
+    // can only pin a box within its own containing block, so any sticky rail
+    // here rides offscreen the moment the hero scrolls away; fixed is the only
+    // treatment that keeps the Tune In gesture reachable down the whole page.
+    // App.tsx reserves the matching bottom padding so nothing hides behind it.
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--rule)] bg-[var(--paper)] px-6 py-3.5 shadow-[var(--plate-shadow)] sm:px-10 lg:static lg:border-y lg:px-0 lg:py-5 lg:shadow-none">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 lg:max-w-none lg:flex-row lg:items-center lg:justify-between lg:gap-8">
         {/* The only transport: tune in at the live edge or pause. */}
         <div className="flex min-w-0 items-center gap-4 lg:flex-1">
           <button

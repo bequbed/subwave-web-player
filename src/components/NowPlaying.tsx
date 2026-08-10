@@ -124,7 +124,7 @@ export function NowPlaying({ playing }: { playing: boolean }) {
               {track?.artist || 'Unknown artist'}
             </p>
             {(track?.album || track?.year) && (
-              <p className="mt-2 break-words text-sm leading-[1.55] text-[var(--pencil)]">
+              <p className="mt-2 break-words text-sm leading-[1.55] tabular-nums text-[var(--pencil)]">
                 {track?.album}
                 {track?.album && track?.year ? ' · ' : ''}
                 {track?.year || ''}
@@ -136,7 +136,7 @@ export function NowPlaying({ playing }: { playing: boolean }) {
                 {chips.map((chip, index) => (
                   <span
                     key={`${chip}-${index}`}
-                    className="max-w-full break-words text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--pencil)] underline decoration-[var(--rule)] decoration-1 underline-offset-4"
+                    className="max-w-full break-words text-[11px] font-medium uppercase tabular-nums tracking-[0.12em] text-[var(--pencil)] underline decoration-[var(--rule)] decoration-1 underline-offset-4"
                   >
                     {chip}
                   </span>

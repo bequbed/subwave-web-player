@@ -31,10 +31,13 @@ function turnLabel(m: SessionMessage): string {
   return m.kind || m.role || 'dj';
 }
 
+// Only request (ember) and handoff (tide) turns carry a visible left rule.
+// Ordinary turns keep the transparent border purely to hold the indent, so the
+// transcript reads as one column of type with no per-turn rail.
 function kindRule(kind: string | undefined): string {
   if (kind === 'request') return 'border-[var(--ember)]';
   if (kind === 'handoff') return 'border-[var(--tide)]';
-  return 'border-[var(--rule)]';
+  return 'border-transparent';
 }
 
 export function BoothFeed() {

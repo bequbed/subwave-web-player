@@ -44,8 +44,8 @@ function Masthead() {
           </p>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-4 sm:items-end">
-          <div className="flex min-w-0 items-center gap-5">
+        <div className="flex min-w-0 max-w-full flex-col gap-4 sm:items-end">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-5">
             {listeners != null && (
               <span className="shrink-0 text-[11px] uppercase tabular-nums tracking-[0.16em] text-[var(--pencil)]">
                 {listeners} listening
@@ -53,8 +53,10 @@ function Masthead() {
             )}
             <SignalDot online={online} ready={ready} />
           </div>
-          {/* On desktop the on-air host reads as the masthead byline. */}
-          <aside aria-label="On air host" className="min-w-0">
+          {/* On desktop the on-air host reads as the masthead byline. It has to
+              hold any guest count inside the page width, so it stays full-width
+              here and wraps internally rather than pushing the layout wider. */}
+          <aside aria-label="On air host" className="w-full min-w-0 max-w-full">
             <OnAir />
           </aside>
         </div>
@@ -74,7 +76,10 @@ function PlayerView() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 sm:px-10 sm:py-10">
+    // The bottom padding below `lg` is layout compensation for the player rail,
+    // which is fixed to the viewport there (see PlayerBar) so Tune In stays
+    // reachable at any scroll position. At `lg` the rail rejoins the flow.
+    <div className="mx-auto w-full max-w-6xl px-6 pt-8 pb-36 sm:px-10 sm:pt-10 lg:pb-10">
       <Masthead />
 
       <main className="space-y-10">
