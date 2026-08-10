@@ -34,8 +34,12 @@
 //
 // An *open-ended* `Range: bytes=0-` is served as a plain `200` with no length
 // and a continuous body — the healthy path the local <audio> element already
-// uses. BUFFERED + `currentTime = 0` is what makes the receiver read that way,
-// and `duration = -1` stops it deriving a seekable window at all.
+// uses. On the receivers this was tested against, BUFFERED + `currentTime = 0`
+// is what produced that open-ended read; CAF documents start-position
+// semantics, not the resulting HTTP request shape, so treat this as observed
+// behaviour of those receivers and this mount rather than a guarantee. The
+// watchdog further down exists precisely because another firmware may not
+// behave the same way.
 
 import { useEffect, useRef, useState } from 'react';
 import { config } from '@/config';
@@ -45,18 +49,38 @@ import { useStationFeed } from '@/hooks/useStationFeed';
 export type CastState = 'unavailable' | 'idle' | 'connecting' | 'connected';
 
 /** What the receiver reports about the loaded stream, polled while connected.
- *  'unknown' before the first status arrives (or while not casting). */
-export type ReceiverState = 'unknown' | 'idle' | 'buffering' | 'playing' | 'paused' | 'ended';
+ *  'unknown' before the first status arrives (or while not casting).
+ *
+ *  The Cast media protocol has only IDLE / BUFFERING / PAUSED / PLAYING —
+ *  there is no ENDED player state. Completion and failure both arrive as IDLE
+ *  plus an `idleReason`, which is what 'finished' / 'stopped' / 'error'
+ *  classify below. */
+export type ReceiverState =
+  | 'unknown'
+  | 'idle'
+  | 'buffering'
+  | 'playing'
+  | 'paused'
+  | 'finished'
+  | 'stopped'
+  | 'error';
 
 /** How the stream was described to the receiver. 'buffered' is the correct
  *  mode for this Icecast mount (see the note above); 'live' only appears if
  *  the watchdog below had to fall back to it. */
 export type StreamMode = 'buffered' | 'live';
 
-/** If the receiver has not reached PLAYING this long after a load was
- *  accepted, reload once in the other stream mode. Covers the case where a
- *  receiver firmware behaves the opposite way round to the one diagnosed. */
+/** If a load was accepted but the receiver shows no sign of playing it — no
+ *  media session at all, or IDLE / an error — reload once in the other stream
+ *  mode. Covers the case where a receiver firmware behaves the opposite way
+ *  round to the one diagnosed. */
 const FALLBACK_AFTER_MS = 10000;
+
+/** A receiver that is actively BUFFERING is fetching the mount, just slowly
+ *  (cold Wi-Fi, a distant Icecast). Replacing a viable BUFFERED load with the
+ *  mode already known to be wrong for this mount would make that *worse*, so
+ *  buffering gets a much longer rope than silence does. */
+const BUFFERING_FALLBACK_AFTER_MS = 45000;
 
 /** Google's built-in Default Media Receiver — usable without any registration
  *  or API keys (https://developers.google.com/cast/docs/web_sender). */
@@ -98,6 +122,133 @@ function chromeCast(): CastMediaNamespace | null {
 
 let contextInitAttempted = false;
 
+// ---------------------------------------------------------------------------
+// Session bookkeeping — module scope, deliberately.
+//
+// There is exactly one receiver and one SDK-wide CastContext, but the app
+// mounts useCast more than once (App for the media-session guard, PlayerBar
+// for the rail). Per-instance refs would give each copy its own attempt token,
+// its own pending-start flag and its own watchdog — two watchdogs racing to
+// "fix" the same session with two competing fallback loads. One session, one
+// set of facts; React state below is only each instance's view of it.
+// ---------------------------------------------------------------------------
+
+/** Monotonic operation token: bumped on every start, stop, and externally
+ *  observed session end/failure, so a stale requestSession/loadMedia can never
+ *  touch a session it doesn't own. */
+let attemptToken = 0;
+/** Synchronous in-flight guard: the picker's CONNECTING state arrives via an
+ *  async event, so render state alone cannot stop a double-click opening two
+ *  pickers before that event lands. */
+let startInFlight = false;
+/** Set when the user asks to cast; consumed by whichever signal first has a
+ *  usable session in hand (see consumePendingStart). */
+let pendingStart = false;
+let pendingStartAttempt = 0;
+/** The session the bookkeeping below describes. Every post-await write and
+ *  every teardown is guarded on this as well as the attempt token: a resumed
+ *  or replaced session must not inherit — or be torn down by — the previous
+ *  one's in-flight work. */
+let activeSession: CastSession | null = null;
+// Per-session watchdog state: when the last load was accepted, in which mode,
+// whether the receiver has ever actually played it, whether the watchdog has
+// been disarmed (deliberate pause / stop), and whether the one permitted
+// fallback reload has been spent.
+let loadedAt = 0;
+let loadedMode: StreamMode = 'buffered';
+let sawPlaying = false;
+let watchdogDisarmed = false;
+let fallbackUsed = false;
+// Shared view state, mirrored into every mounted instance by the 1s poll so
+// the rail reports the same thing regardless of which instance did the load.
+let streamModeValue: StreamMode | null = null;
+let loadErrorValue: string | null = null;
+
+function safeSessionId(session: CastSession | null): string | null {
+  if (!session) return null;
+  try {
+    return session.getSessionId();
+  } catch {
+    return null;
+  }
+}
+
+function safeFriendlyName(session: CastSession | null): string | null {
+  if (!session) return null;
+  try {
+    return session.getSessionObj().receiver.friendlyName ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when `session` is the one `activeSession` describes. Object identity is
+ *  the normal answer; the id comparison is insurance against an SDK that hands
+ *  back a fresh wrapper for the same session. */
+function isActiveSession(session: CastSession | null): boolean {
+  if (!session || !activeSession) return false;
+  if (session === activeSession) return true;
+  const id = safeSessionId(session);
+  return id !== null && id === safeSessionId(activeSession);
+}
+
+/** Watchdog and mode state are per *session*, not per attempt — a resumed or
+ *  replaced session must never inherit the previous one's "already saw
+ *  playing" or "already spent the fallback" verdict. */
+function resetSessionState(): void {
+  loadedAt = 0;
+  loadedMode = 'buffered';
+  sawPlaying = false;
+  watchdogDisarmed = false;
+  fallbackUsed = false;
+  streamModeValue = null;
+  loadErrorValue = null;
+}
+
+/** How long to wait, given what the receiver currently reports, before calling
+ *  a load dead — or null when falling back would be wrong.
+ *
+ *  PAUSED is somebody's decision (the cast mini-controller, a smart display's
+ *  own transport); reloading with autoplay would restart audio a listener
+ *  deliberately stopped. CANCELLED/INTERRUPTED likewise mean something took the
+ *  media away on purpose — including our own replacement load. */
+function fallbackDelayFor(playerState?: string, idleReason?: string): number | null {
+  switch (playerState) {
+    case 'PLAYING':
+    case 'PAUSED':
+      return null;
+    case 'BUFFERING':
+      return BUFFERING_FALLBACK_AFTER_MS;
+    case 'IDLE':
+      if (idleReason === 'CANCELLED' || idleReason === 'INTERRUPTED') return null;
+      // ERROR, FINISHED, or no reason yet: the load is not going to start.
+      return FALLBACK_AFTER_MS;
+    default:
+      // No media session at all — the receiver never picked the load up.
+      return FALLBACK_AFTER_MS;
+  }
+}
+
+function classifyReceiver(playerState?: string, idleReason?: string): ReceiverState {
+  switch (playerState) {
+    case 'PLAYING':
+      return 'playing';
+    case 'BUFFERING':
+      return 'buffering';
+    case 'PAUSED':
+      return 'paused';
+    case 'IDLE':
+      if (idleReason === 'ERROR') return 'error';
+      if (idleReason === 'FINISHED') return 'finished';
+      if (idleReason === 'CANCELLED') return 'stopped';
+      // INTERRUPTED (a replacement load is landing) or no reason yet: the
+      // receiver has accepted something but isn't playing it.
+      return 'idle';
+    default:
+      return 'unknown';
+  }
+}
+
 export interface Cast {
   /** 'unavailable' until the SDK loads and finds devices; 'connected' while a
    *  session is active on a speaker. */
@@ -107,10 +258,16 @@ export interface Cast {
   /** Receiver-reported media state ('playing'/'buffering'/'idle'...), polled
    *  once a second while a session is active. */
   receiverState: ReceiverState;
-  /** Which stream mode the receiver is currently loaded with, or null when
-   *  nothing is loaded. 'live' means the BUFFERED attempt never started and
-   *  the watchdog fell back — worth surfacing, it is diagnostic. */
+  /** Which stream mode the receiver was last asked for, or null when nothing
+   *  has been loaded. Set the moment a load is *dispatched*, so a hung or
+   *  failed fallback can never leave the rail claiming the mode that already
+   *  demonstrably didn't play. 'live' means the watchdog fell back — worth
+   *  surfacing, it is diagnostic. */
   streamMode: StreamMode | null;
+  /** Set when a load attempt failed outright and the session was left up
+   *  (the watchdog fallback). Rendered in the rail so a silent receiver is
+   *  never reported as healthy. */
+  loadError: string | null;
   /** True when the cast button should render. */
   supported: boolean;
   /** Open the device picker and start the stream on the chosen speaker. */
@@ -124,45 +281,58 @@ export function useCast(): Cast {
   const [state, setState] = useState<CastState>('unavailable');
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [receiverState, setReceiverState] = useState<ReceiverState>('unknown');
-  const [streamMode, setStreamMode] = useState<StreamMode | null>(null);
-  // Watchdog bookkeeping: when the last load was accepted, in which mode,
-  // whether the receiver has ever actually played it, and whether the one
-  // permitted fallback reload has been spent.
-  const loadedAtRef = useRef(0);
-  const loadedModeRef = useRef<StreamMode>('buffered');
-  const sawPlayingRef = useRef(false);
-  const fallbackUsedRef = useRef(false);
-  // Monotonic operation tokens: invalidated on every stop/start so a stale
-  // requestSession/loadMedia from an earlier attempt can never touch a session
-  // it doesn't own (e.g. ending the session a newer attempt just started).
-  const attemptRef = useRef(0);
-  // Synchronous in-flight guard: the picker's CONNECTING state arrives via an
-  // async event, so render state alone cannot stop a double-click opening two
-  // pickers before that event lands.
-  const startInFlightRef = useRef(false);
-  // Set when the user asks to cast; cleared the moment loadMedia fires. The
-  // CONNECTED event handler loads media on this flag, so a session whose
-  // requestSession() promise resolves before/after the event still gets its
-  // stream loaded exactly once.
-  const pendingStartRef = useRef(false);
-  const pendingStartAttemptRef = useRef(0);
+  const [streamMode, setStreamMode] = useState<StreamMode | null>(streamModeValue);
+  const [loadError, setLoadError] = useState<string | null>(loadErrorValue);
   // Fresh snapshot for the (once-mounted) event handler closure.
   const nowPlayingRef = useRef(nowPlaying);
   nowPlayingRef.current = nowPlaying;
 
-  /** Attempt-guarded teardown shared by every failure path: only touches the
-   *  session if this attempt is still the live one, and forces the rail back
-   *  to idle as insurance against a missing NOT_CONNECTED transition. */
-  function teardownAttempt(context: CastContext, attempt: number): void {
-    if (attemptRef.current !== attempt) return;
-    pendingStartRef.current = false;
-    if (context.getCurrentSession()) {
+  /** Start tracking `session`, wiping the previous session's watchdog state.
+   *  A no-op when it is already the tracked one, so the 1s poll can call it
+   *  every tick without resetting anything. */
+  function adoptSession(session: CastSession | null): void {
+    if (session === null && activeSession === null) return;
+    if (isActiveSession(session)) return;
+    activeSession = session;
+    resetSessionState();
+    setStreamMode(null);
+    setLoadError(null);
+    setDeviceName(safeFriendlyName(session));
+  }
+
+  /** Stop tracking whatever session was active — an external disconnect, a
+   *  failed start, or our own stop. Invalidates the tokens too, so a load
+   *  still in flight for the dead session can't write over the next one. */
+  function forgetSession(): void {
+    attemptToken += 1;
+    startInFlight = false;
+    pendingStart = false;
+    activeSession = null;
+    resetSessionState();
+    setStreamMode(null);
+    setLoadError(null);
+  }
+
+  /** Attempt- and session-guarded teardown shared by every failure path.
+   *  When a specific session is named (a load failed) only that session may be
+   *  ended: a late rejection from an old load must not kill the session that
+   *  has since resumed or replaced it. */
+  function teardownAttempt(context: CastContext, token: number, session?: CastSession): void {
+    if (attemptToken !== token) return;
+    const current = context.getCurrentSession();
+    if (session && current && !(isActiveSession(session) && isActiveSession(current))) {
+      return; // someone else owns the receiver now — leave it alone
+    }
+    pendingStart = false;
+    if (current) {
       try {
         context.endCurrentSession(true);
       } catch {
         // Already ended — nothing to do.
       }
     }
+    // Force the rail back to idle as insurance against a missing
+    // NOT_CONNECTED transition.
     setState('idle');
   }
 
@@ -172,7 +342,7 @@ export function useCast(): Cast {
   async function loadMediaForSession(
     session: CastSession,
     mode: StreamMode,
-    attempt: number,
+    token: number,
   ): Promise<void> {
     const cc = chromeCast();
     if (!cc) return;
@@ -186,9 +356,9 @@ export function useCast(): Cast {
       // -1 = endless, which is what Google documents for LIVE. Without it the
       // receiver derives a seekable window from Icecast's fabricated 1GiB
       // Content-Range and seeks into audio that does not exist. Left untouched
-      // in BUFFERED mode on purpose: there the receiver reads open-ended, gets
-      // a 200 with no Content-Length, and infers an endless stream by itself —
-      // exactly how the local <audio> element already plays this mount.
+      // in BUFFERED mode on purpose: there the receivers tested read the mount
+      // open-ended, get a 200 with no Content-Length, and infer an endless
+      // stream by themselves — the same way the local <audio> element plays it.
       mediaInfo.duration = -1;
     }
     const metadata = new cc.media.MusicTrackMediaMetadata();
@@ -204,35 +374,66 @@ export function useCast(): Cast {
     // Both already match the SDK constructor defaults (autoplay = true,
     // currentTime = null). They are set explicitly because they are the two
     // properties that decide whether the receiver starts, and where — pinning
-    // currentTime to 0 keeps it on the open-ended read Icecast serves cleanly
-    // rather than a seek into the fabricated range.
+    // currentTime to 0 asks for playback from the beginning rather than a
+    // seek, which is what kept the tested receivers on the open-ended read
+    // Icecast serves cleanly. The watchdog covers firmware that reads it
+    // differently.
     request.autoplay = true;
     request.currentTime = 0;
 
     // loadMedia RESOLVES with an error code on failure — it does not reject —
     // so the result must be checked or a failed load would be silent.
     const result = await session.loadMedia(request);
-    if (attemptRef.current !== attempt) return; // superseded while in flight
+    // Guarded on the token *and* the session: an old session's slow load
+    // resolving late must not relabel the session that replaced it.
+    if (attemptToken !== token || !isActiveSession(session)) return;
     if (result) {
       console.warn(`[cast] receiver rejected the ${mode} stream load:`, result);
       throw new Error(`loadMedia failed: ${result}`);
     }
     console.info(`[cast] ${mode} stream load accepted by receiver`);
-    loadedAtRef.current = Date.now();
-    loadedModeRef.current = mode;
-    sawPlayingRef.current = false;
+    loadedAt = Date.now();
+    loadedMode = mode;
+    sawPlaying = false;
+    watchdogDisarmed = false;
+    streamModeValue = mode;
+    loadErrorValue = null;
     setStreamMode(mode);
+    setLoadError(null);
   }
 
-  // Both the once-mounted CAST_STATE_CHANGED handler and the polling effect
-  // need to trigger a load; keep a fresh reference so neither is stuck with a
+  // Both the once-mounted event handlers and the polling effect need to
+  // trigger a load; keep a fresh reference so neither is stuck with a
   // first-render closure.
   const loadRef = useRef(loadMediaForSession);
   loadRef.current = loadMediaForSession;
 
+  /** The single place a pending start turns into a load. Four signals can be
+   *  the first to hold a usable session — requestSession() resolving, the
+   *  CONNECTED cast-state event, SESSION_STARTED/RESUMED, and the 1s poll as a
+   *  backstop — and any of them can arrive while getCurrentSession() is still
+   *  null. Each one calls this; the flag makes exactly one of them win, and
+   *  the poll guarantees the flag can never stay stuck set with a live
+   *  session in hand. */
+  function consumePendingStart(context: CastContext, session: CastSession): void {
+    if (!pendingStart || pendingStartAttempt !== attemptToken) return;
+    const token = attemptToken;
+    pendingStart = false;
+    adoptSession(session);
+    void loadRef.current(session, 'buffered', token).catch(() => {
+      teardownAttempt(context, token, session);
+    });
+  }
+
+  // Same reason as loadRef: the once-mounted event handlers and the polling
+  // effect both consume the pending start, and neither may be stuck with a
+  // first-render closure.
+  const consumeRef = useRef(consumePendingStart);
+  consumeRef.current = consumePendingStart;
+
   useEffect(() => {
     let disposed = false;
-    let removeCastListener: (() => void) | null = null;
+    let removeListeners: (() => void) | null = null;
 
     void waitForCastApi()
       .then((available) => {
@@ -259,31 +460,14 @@ export function useCast(): Cast {
 
           const syncFromCastState = (castState: string) => {
             if (castState === framework.CastState.CONNECTED) {
-              setDeviceName(
-                context.getCurrentSession()?.getSessionObj().receiver.friendlyName ?? null,
-              );
               setState('connected');
-              // A session just attached. If this is the connection fulfilling a
-              // user-initiated cast, hand it the stream now — the requestSession
-              // promise alone is not a reliable signal that the session object
-              // is readable yet, but this event is.
-              if (
-                pendingStartRef.current &&
-                pendingStartAttemptRef.current === attemptRef.current
-              ) {
-                const attempt = attemptRef.current;
-                const session = context.getCurrentSession();
-                // Consume the pending flag ONLY once a session is actually in
-                // hand. Clearing it first meant that a CONNECTED event arriving
-                // before the session object attached burned the flag and the
-                // stream was never loaded at all — a permanently connected,
-                // permanently silent session with no error anywhere.
-                if (session) {
-                  pendingStartRef.current = false;
-                  void loadRef.current(session, 'buffered', attempt).catch(() => {
-                    teardownAttempt(context, attempt);
-                  });
-                }
+              const session = context.getCurrentSession();
+              if (session) {
+                setDeviceName(safeFriendlyName(session));
+                // A session is attached and readable. If this is the connection
+                // fulfilling a user-initiated cast, hand it the stream now.
+                adoptSession(session);
+                consumeRef.current(context, session);
               }
             } else if (castState === framework.CastState.CONNECTING) {
               setState('connecting');
@@ -298,14 +482,49 @@ export function useCast(): Cast {
             syncFromCastState(e.castState);
           };
 
+          // Session lifecycle is the authoritative signal for *which* session
+          // the bookkeeping describes. CAST_STATE_CHANGED only says "something
+          // is connected"; this says which object, and it carries the session
+          // even when getCurrentSession() has not caught up yet.
+          const onSessionStateChanged = (e: CastSessionEvent) => {
+            const { SessionState } = framework;
+            if (
+              e.sessionState === SessionState.SESSION_STARTED ||
+              e.sessionState === SessionState.SESSION_RESUMED
+            ) {
+              const session = e.session ?? context.getCurrentSession();
+              if (!session) return;
+              adoptSession(session);
+              setDeviceName(safeFriendlyName(session));
+              consumeRef.current(context, session);
+            } else if (
+              e.sessionState === SessionState.SESSION_ENDED ||
+              e.sessionState === SessionState.SESSION_START_FAILED
+            ) {
+              // External disconnect, receiver app quit, or a start that never
+              // made it: invalidate the tokens as well, or an in-flight load
+              // could land on whatever session comes next.
+              forgetSession();
+              setDeviceName(null);
+            }
+          };
+
           context.addEventListener(
             framework.CastContextEventType.CAST_STATE_CHANGED,
             onCastStateChanged,
           );
-          removeCastListener = () => {
+          context.addEventListener(
+            framework.CastContextEventType.SESSION_STATE_CHANGED,
+            onSessionStateChanged,
+          );
+          removeListeners = () => {
             context.removeEventListener(
               framework.CastContextEventType.CAST_STATE_CHANGED,
               onCastStateChanged,
+            );
+            context.removeEventListener(
+              framework.CastContextEventType.SESSION_STATE_CHANGED,
+              onSessionStateChanged,
             );
           };
 
@@ -324,7 +543,7 @@ export function useCast(): Cast {
 
     return () => {
       disposed = true;
-      removeCastListener?.();
+      removeListeners?.();
     };
   }, []);
 
@@ -337,6 +556,7 @@ export function useCast(): Cast {
     if (state !== 'connected') {
       setReceiverState('unknown');
       setStreamMode(null);
+      setLoadError(null);
       return;
     }
     const framework = window.cast?.framework;
@@ -344,46 +564,73 @@ export function useCast(): Cast {
     const context = framework.CastContext.getInstance();
     const poll = () => {
       const session = context.getCurrentSession();
-      const media = session?.getMediaSession();
+      if (!session) {
+        setReceiverState('unknown');
+        return;
+      }
+      // A session we never saw start (auto-join after a page reload, or one
+      // that replaced ours) becomes the tracked one — with a clean watchdog,
+      // because we did not load its media.
+      adoptSession(session);
+      // Backstop for the pending flag. Every event-driven consumer can fire
+      // while getCurrentSession() is still null; this one runs with a session
+      // in hand by definition, so the flag can never stay stuck set.
+      consumeRef.current(context, session);
+
+      const media = session.getMediaSession();
       const ps = media?.playerState;
-      if (ps === 'PLAYING') sawPlayingRef.current = true;
+      const idleReason = media?.idleReason ?? undefined;
+      if (ps === 'PLAYING') sawPlaying = true;
+      // A receiver that is paused or was stopped on the device has the media
+      // and is deliberately not playing it. Disarm permanently: the elapsed
+      // clock below would otherwise fire the moment it is unpaused.
+      if (ps === 'PAUSED' || idleReason === 'CANCELLED') watchdogDisarmed = true;
 
       // Silent-receiver watchdog. A load the receiver accepted but never
       // starts playing raises no error and never tears the session down, so
       // nothing else would ever notice. Reload once in the other stream mode;
-      // attempt-token guarded, and spent at most once per session.
+      // token- and session-guarded, and spent at most once per session.
+      const delay = fallbackDelayFor(ps, idleReason);
       if (
-        !sawPlayingRef.current &&
-        !fallbackUsedRef.current &&
-        loadedAtRef.current > 0 &&
-        Date.now() - loadedAtRef.current > FALLBACK_AFTER_MS &&
-        session
+        !sawPlaying &&
+        !watchdogDisarmed &&
+        !fallbackUsed &&
+        loadedAt > 0 &&
+        delay !== null &&
+        Date.now() - loadedAt > delay &&
+        isActiveSession(session)
       ) {
-        fallbackUsedRef.current = true;
-        const next: StreamMode = loadedModeRef.current === 'buffered' ? 'live' : 'buffered';
+        fallbackUsed = true;
+        const waited = Math.round((Date.now() - loadedAt) / 1000);
+        const next: StreamMode = loadedMode === 'buffered' ? 'live' : 'buffered';
         console.warn(
-          `[cast] receiver never started in ${loadedModeRef.current} mode; retrying as ${next}`,
+          `[cast] receiver never started in ${loadedMode} mode after ${waited}s ` +
+            `(playerState=${ps ?? 'none'}, idleReason=${idleReason ?? 'none'}); retrying as ${next}`,
         );
-        void loadRef.current(session, next, attemptRef.current).catch(() => {
+        // Report the fallback when it is *dispatched*, not when it resolves:
+        // if the reload hangs or fails, the rail must not keep presenting the
+        // mode that already demonstrably didn't play as the current one.
+        streamModeValue = next;
+        loadErrorValue = null;
+        setStreamMode(next);
+        setLoadError(null);
+        const token = attemptToken;
+        void loadRef.current(session, next, token).catch((err: unknown) => {
           // Leave the session up rather than tearing it down on the fallback:
           // the rail already reports the receiver state, which is the useful
-          // signal here.
+          // signal here — but say out loud that the retry failed.
+          if (attemptToken !== token || !isActiveSession(session)) return;
+          console.warn(`[cast] ${next} fallback load failed:`, err);
+          loadErrorValue = `${next} retry failed`;
+          setLoadError(loadErrorValue);
         });
       }
 
-      setReceiverState(
-        ps === 'PLAYING'
-          ? 'playing'
-          : ps === 'BUFFERING'
-            ? 'buffering'
-            : ps === 'PAUSED'
-              ? 'paused'
-              : ps === 'IDLE'
-                ? 'idle'
-                : ps === 'ENDED'
-                  ? 'ended'
-                  : 'unknown',
-      );
+      setReceiverState(classifyReceiver(ps, idleReason));
+      // Mirror the shared view state: the load may have been driven by another
+      // mounted instance of this hook.
+      setStreamMode(streamModeValue);
+      setLoadError(loadErrorValue);
     };
     poll();
     const timer = window.setInterval(poll, 1000);
@@ -395,44 +642,37 @@ export function useCast(): Cast {
     const cc = chromeCast();
     if (!framework || !cc) return;
     if (state === 'connecting' || state === 'connected') return;
-    if (startInFlightRef.current) return;
+    if (startInFlight) return;
     const context = framework.CastContext.getInstance();
 
-    startInFlightRef.current = true;
-    const attempt = ++attemptRef.current;
-    pendingStartAttemptRef.current = attempt;
-    pendingStartRef.current = true;
-    // Fresh watchdog state for this attempt.
-    loadedAtRef.current = 0;
-    loadedModeRef.current = 'buffered';
-    sawPlayingRef.current = false;
-    fallbackUsedRef.current = false;
+    startInFlight = true;
+    const token = ++attemptToken;
+    pendingStartAttempt = token;
+    pendingStart = true;
+    // Fresh session state for this attempt.
+    activeSession = null;
+    resetSessionState();
     setStreamMode(null);
+    setLoadError(null);
     try {
       // Opens the picker and resolves once the user picks a device (or the
-      // picker is dismissed). It does NOT carry the session — the CONNECTED
-      // event handler above loads media as soon as the session attaches; this
-      // path is the fallback for when the session is already readable here.
+      // picker is dismissed). It does NOT carry the session — the session
+      // events above load media as soon as one attaches; this path is the
+      // fallback for when the session is already readable here.
       await context.requestSession();
-      if (attemptRef.current !== attempt) return; // stop/start superseded us
-      if (pendingStartRef.current) {
-        const session = context.getCurrentSession();
-        if (session) {
-          // Session already attached — load immediately. (If it is not yet
-          // readable here, leave the pending flag set: the CONNECTED event
-          // will consume it the moment the session attaches.)
-          pendingStartRef.current = false;
-          await loadRef.current(session, 'buffered', attempt);
-        }
-      }
+      if (attemptToken !== token) return; // stop/start/disconnect superseded us
+      const session = context.getCurrentSession();
+      if (session) consumePendingStart(context, session);
+      // If no session is readable yet, the pending flag stays set:
+      // SESSION_STARTED / CONNECTED — or, failing both, the 1s poll — consume
+      // it the moment one is.
     } catch {
-      teardownAttempt(context, attempt);
+      teardownAttempt(context, token);
     } finally {
-      // Release the in-flight guard only. pendingStartRef stays set if the
-      // session had not attached yet — the CONNECTED event consumes it the
-      // moment it does; teardownAttempt/stopCast/new starts clear it otherwise.
-      if (attemptRef.current === attempt) {
-        startInFlightRef.current = false;
+      // Release the in-flight guard only, and only if this attempt is still
+      // the live one (a newer start owns the guard otherwise).
+      if (attemptToken === token) {
+        startInFlight = false;
       }
     }
   }
@@ -443,13 +683,7 @@ export function useCast(): Cast {
     const context = framework.CastContext.getInstance();
     // Invalidate any in-flight start; the teardown below then can't be
     // confused with a session a newer attempt is establishing.
-    attemptRef.current += 1;
-    startInFlightRef.current = false;
-    pendingStartRef.current = false;
-    loadedAtRef.current = 0;
-    sawPlayingRef.current = false;
-    fallbackUsedRef.current = false;
-    setStreamMode(null);
+    forgetSession();
     if (context.getCurrentSession()) {
       context.endCurrentSession(true);
       // State returns to 'idle' via CAST_STATE_CHANGED when teardown completes
@@ -463,6 +697,7 @@ export function useCast(): Cast {
     deviceName,
     receiverState,
     streamMode,
+    loadError,
     supported: state !== 'unavailable',
     cast: startCast,
     stop: stopCast,

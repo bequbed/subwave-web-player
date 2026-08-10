@@ -35,6 +35,18 @@ declare global {
       CONNECTING: string;
       CONNECTED: string;
     };
+    /** Session lifecycle, reported through SESSION_STATE_CHANGED. Unlike
+     *  CastState this names *which* session changed, which is what ties the
+     *  hook's bookkeeping to one session. */
+    SessionState: {
+      NO_SESSION: string;
+      SESSION_STARTING: string;
+      SESSION_STARTED: string;
+      SESSION_START_FAILED: string;
+      SESSION_ENDING: string;
+      SESSION_ENDED: string;
+      SESSION_RESUMED: string;
+    };
   }
 
   interface CastContext {
@@ -51,23 +63,41 @@ declare global {
     /** End the active session; true = also stop the app on the receiver. */
     endCurrentSession(stopCasting: boolean): void;
     addEventListener(type: string, handler: (event: CastEvent) => void): void;
+    addEventListener(type: string, handler: (event: CastSessionEvent) => void): void;
     removeEventListener(type: string, handler: (event: CastEvent) => void): void;
+    removeEventListener(type: string, handler: (event: CastSessionEvent) => void): void;
   }
 
+  /** CAST_STATE_CHANGED payload. */
   interface CastEvent {
     castState: string;
+  }
+
+  /** SESSION_STATE_CHANGED payload — carries the session itself, which can be
+   *  readable here before getCurrentSession() returns it. */
+  interface CastSessionEvent {
+    sessionState: string;
+    session: CastSession | null;
   }
 
   interface CastSession {
     loadMedia(request: CastLoadRequest): Promise<string | null>;
     getSessionObj(): { receiver: { friendlyName: string } };
+    /** Stable identifier for this session, used to tell a resumed or replaced
+     *  session from the one the sender's bookkeeping describes. */
+    getSessionId(): string;
     /** Live media status on the receiver, or null before a load is in flight. */
     getMediaSession(): CastMediaSession | null;
   }
 
   interface CastMediaSession {
-    /** 'IDLE' | 'BUFFERING' | 'PAUSED' | 'PLAYING' | 'ENDED' */
+    /** 'IDLE' | 'BUFFERING' | 'PAUSED' | 'PLAYING'. There is no ENDED state in
+     *  the Cast media protocol — completion and failure are IDLE + idleReason. */
     playerState: string;
+    /** Only meaningful while playerState is 'IDLE':
+     *  'FINISHED' | 'CANCELLED' | 'INTERRUPTED' | 'ERROR'. Null/absent when the
+     *  receiver is idle because nothing has started yet. */
+    idleReason?: string | null;
   }
 
   /** Legacy `chrome.cast` model — the classes loadMedia() consumes. */

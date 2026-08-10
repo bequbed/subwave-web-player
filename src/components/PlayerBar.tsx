@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import { useStationFeed } from '@/hooks/useStationFeed';
-import { useCast } from '@/hooks/useCast';
+import { useCast, type ReceiverState } from '@/hooks/useCast';
 import type { Player } from '@/hooks/usePlayer';
 import { compact } from '@/lib/format';
 
@@ -80,6 +80,21 @@ function Vital({ label, value }: { label: string; value: string }) {
   );
 }
 
+// What the receiver says it is doing with the stream, in rail language.
+// 'finished'/'stopped'/'error' are the three ways the Cast protocol reports an
+// idle receiver that *had* media (there is no ENDED player state — it is
+// always IDLE plus an idleReason, which useCast has already classified).
+const RECEIVER_STATUS: Record<ReceiverState, string> = {
+  playing: 'playing',
+  buffering: 'buffering…',
+  paused: 'paused on speaker',
+  finished: 'stream ended',
+  stopped: 'stopped on speaker',
+  error: 'receiver error',
+  idle: 'waiting for stream',
+  unknown: 'connecting',
+};
+
 export function PlayerBar({ player }: { player: Player }) {
   const { nowPlaying } = useStationFeed();
   const cast = useCast();
@@ -145,24 +160,16 @@ export function PlayerBar({ player }: { player: Player }) {
             : 'Ready to listen';
   // Receiver-reported media state while casting — the ground truth for
   // "connected but silent" (idle = load accepted, not playing).
-  const receiverStatus =
-    cast.receiverState === 'playing'
-      ? 'playing'
-      : cast.receiverState === 'buffering'
-        ? 'buffering…'
-        : cast.receiverState === 'paused'
-          ? 'paused'
-          : cast.receiverState === 'ended'
-            ? 'stream ended'
-            : cast.receiverState === 'idle'
-              ? 'waiting for stream'
-              : 'connecting';
+  const receiverStatus = RECEIVER_STATUS[cast.receiverState];
   // 'live' only ever appears if the watchdog had to re-load in the other
   // stream mode, so showing it is worth the extra words — it says which path
-  // the receiver actually accepted.
+  // the receiver was last asked for.
   const castMode = cast.streamMode === 'live' ? ' (live mode)' : '';
+  // A failed retry is reported rather than swallowed: the receiver state alone
+  // can look identical to a healthy one that simply hasn't started yet.
+  const castProblem = cast.loadError ? ` · ${cast.loadError}` : '';
   const stateDetail = casting
-    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}`
+    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}${castProblem}`
     : playing
       ? 'Live signal connected'
       : tunedIn
