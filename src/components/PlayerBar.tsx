@@ -62,7 +62,7 @@ export function PlayerBar({ player }: { player: Player }) {
     quality === 'flac'
       ? 'FLAC · lossless'
       : quality === 'mp3'
-        ? `MP3 · ${bitrate ?? 'live'} kbps`
+        ? 'MP3'
         : loading
           ? 'Selecting quality…'
           : null;
