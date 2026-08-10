@@ -90,6 +90,61 @@ export function useCast(): Cast {
   // async event, so render state alone cannot stop a double-click opening two
   // pickers before that event lands.
   const startInFlightRef = useRef(false);
+  // Set when the user asks to cast; cleared the moment loadMedia fires. The
+  // CONNECTED event handler loads media on this flag, so a session whose
+  // requestSession() promise resolves before/after the event still gets its
+  // stream loaded exactly once.
+  const pendingStartRef = useRef(false);
+  const pendingStartAttemptRef = useRef(0);
+  // Fresh snapshot for the (once-mounted) event handler closure.
+  const nowPlayingRef = useRef(nowPlaying);
+  nowPlayingRef.current = nowPlaying;
+
+  /** Attempt-guarded teardown shared by every failure path: only touches the
+   *  session if this attempt is still the live one, and forces the rail back
+   *  to idle as insurance against a missing NOT_CONNECTED transition. */
+  function teardownAttempt(context: CastContext, attempt: number): void {
+    if (attemptRef.current !== attempt) return;
+    pendingStartRef.current = false;
+    if (context.getCurrentSession()) {
+      try {
+        context.endCurrentSession(true);
+      } catch {
+        // Already ended — nothing to do.
+      }
+    }
+    setState('idle');
+  }
+
+  /** Build the media descriptor and hand it to the receiver. The Default Media
+   *  Receiver can't take per-track updates without a stream restart, so the
+   *  metadata snapshot is taken here, once. */
+  async function loadMediaForSession(session: CastSession): Promise<void> {
+    const cc = chromeCast();
+    if (!cc) return;
+    const track = nowPlayingRef.current?.nowPlaying ?? null;
+    const station = nowPlayingRef.current?.dj?.station;
+
+    const mediaInfo = new cc.media.MediaInfo(config.mp3StreamUrl, 'audio/mpeg');
+    mediaInfo.streamType = cc.media.StreamType.LIVE;
+    const metadata = new cc.media.MusicTrackMediaMetadata();
+    metadata.title = track?.title ?? station ?? 'SUB/WAVE';
+    metadata.artist = track?.artist ?? station ?? 'Live';
+    metadata.albumName = track?.album ?? station ?? '';
+    if (track?.subsonic_id) {
+      metadata.images = [new cc.media.Image(coverUrl(track.subsonic_id))];
+    }
+    mediaInfo.metadata = metadata;
+
+    // loadMedia RESOLVES with an error code on failure — it does not reject —
+    // so the result must be checked or a failed load would be silent.
+    const result = await session.loadMedia(new cc.media.LoadRequest(mediaInfo));
+    if (result) {
+      console.warn('[cast] receiver rejected the stream load:', result);
+      throw new Error(`loadMedia failed: ${result}`);
+    }
+    console.info('[cast] stream load accepted by receiver');
+  }
 
   useEffect(() => {
     let disposed = false;
@@ -124,6 +179,23 @@ export function useCast(): Cast {
                 context.getCurrentSession()?.getSessionObj().receiver.friendlyName ?? null,
               );
               setState('connected');
+              // A session just attached. If this is the connection fulfilling a
+              // user-initiated cast, hand it the stream now — the requestSession
+              // promise alone is not a reliable signal that the session object
+              // is readable yet, but this event is.
+              if (
+                pendingStartRef.current &&
+                pendingStartAttemptRef.current === attemptRef.current
+              ) {
+                const attempt = attemptRef.current;
+                pendingStartRef.current = false;
+                const session = context.getCurrentSession();
+                if (session) {
+                  void loadMediaForSession(session).catch(() => {
+                    teardownAttempt(context, attempt);
+                  });
+                }
+              }
             } else if (castState === framework.CastState.CONNECTING) {
               setState('connecting');
             } else if (castState === framework.CastState.NOT_CONNECTED) {
@@ -177,47 +249,34 @@ export function useCast(): Cast {
 
     startInFlightRef.current = true;
     const attempt = ++attemptRef.current;
+    pendingStartAttemptRef.current = attempt;
+    pendingStartRef.current = true;
     try {
-      // requestSession resolves once the session is established (or the picker
-      // is dismissed) — it does NOT carry the session; read it from the context.
+      // Opens the picker and resolves once the user picks a device (or the
+      // picker is dismissed). It does NOT carry the session — the CONNECTED
+      // event handler above loads media as soon as the session attaches; this
+      // path is the fallback for when the session is already readable here.
       await context.requestSession();
       if (attemptRef.current !== attempt) return; // stop/start superseded us
-      const session = context.getCurrentSession();
-      if (!session) return; // picker dismissed without establishing a session
-
-      // Snapshot the now-playing metadata once, at load time (the Default
-      // Media Receiver can't take per-track updates without a stream restart).
-      const track = nowPlaying?.nowPlaying ?? null;
-      const station = nowPlaying?.dj?.station;
-
-      const mediaInfo = new cc.media.MediaInfo(config.mp3StreamUrl, 'audio/mpeg');
-      mediaInfo.streamType = cc.media.StreamType.LIVE;
-      const metadata = new cc.media.MusicTrackMediaMetadata();
-      metadata.title = track?.title ?? station ?? 'SUB/WAVE';
-      metadata.artist = track?.artist ?? station ?? 'Live';
-      metadata.albumName = track?.album ?? station ?? '';
-      if (track?.subsonic_id) {
-        metadata.images = [new cc.media.Image(coverUrl(track.subsonic_id))];
-      }
-      mediaInfo.metadata = metadata;
-
-      await session.loadMedia(new cc.media.LoadRequest(mediaInfo));
-    } catch {
-      // Picker error, load failure, or session dropped mid-setup. Tear down
-      // only if this attempt is still the live one AND the session it created
-      // is still current — never a newer or unrelated session. The explicit
-      // setState is insurance against the SDK omitting the NOT_CONNECTED
-      // transition, so the rail can never stick on "Connecting…".
-      if (attemptRef.current === attempt && context.getCurrentSession()) {
-        try {
-          context.endCurrentSession(true);
-        } catch {
-          // Already ended — nothing to do.
+      if (pendingStartRef.current) {
+        const session = context.getCurrentSession();
+        if (session) {
+          // Session already attached — load immediately. (If it is not yet
+          // readable here, leave the pending flag set: the CONNECTED event
+          // will consume it the moment the session attaches.)
+          pendingStartRef.current = false;
+          await loadMediaForSession(session);
         }
-        setState('idle');
       }
+    } catch {
+      teardownAttempt(context, attempt);
     } finally {
-      if (attemptRef.current === attempt) startInFlightRef.current = false;
+      // Release the in-flight guard only. pendingStartRef stays set if the
+      // session had not attached yet — the CONNECTED event consumes it the
+      // moment it does; teardownAttempt/stopCast/new starts clear it otherwise.
+      if (attemptRef.current === attempt) {
+        startInFlightRef.current = false;
+      }
     }
   }
 
@@ -229,6 +288,7 @@ export function useCast(): Cast {
     // confused with a session a newer attempt is establishing.
     attemptRef.current += 1;
     startInFlightRef.current = false;
+    pendingStartRef.current = false;
     if (context.getCurrentSession()) {
       context.endCurrentSession(true);
       // State returns to 'idle' via CAST_STATE_CHANGED when teardown completes
