@@ -1,18 +1,27 @@
-// The centrepiece: big cover art, the airing track, its acoustic-tag strip
+// The centrepiece: the artwork plate, the airing track, its acoustic-tag strip
 // (genre · BPM · key · mood · energy — all optional, an untagged track just
-// shows fewer labels), and a client-side progress bar.
+// shows fewer labels), and the ticker rule.
+//
+// LONGWAVE signature moments live here: the plate (§5.1), the ticker rule
+// (§5.2) and the ON AIR stamp (§5.3). The ticker rule is a printed rule, not a
+// scrubber — it is non-interactive by construction, because this is live radio
+// and there is nothing to seek to.
 
 import { useStationFeed } from '@/hooks/useStationFeed';
 import { useElapsed } from '@/hooks/useElapsed';
 import { coverUrl } from '@/lib/stationClient';
-import { clock, gradientFor } from '@/lib/format';
+import { clock } from '@/lib/format';
 import type { NowPlayingTrack } from '@/lib/types';
 
-function SignalLabel({ children }: { children: React.ReactNode }) {
+/** Letterpress placeholder — the station monogram debossed into the stock.
+ *  Used off-air and whenever a track carries no cover (jingles, idents). */
+function Monogram({ className = '' }: { className?: string }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--muted)]">
-      <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full bg-[var(--signal)]/60" />
-      <span className="break-words">{children}</span>
+    <span
+      aria-hidden="true"
+      className={`type-display select-none leading-none text-[var(--rule)] [text-shadow:0_1px_0_rgb(255_255_255/0.9)] ${className}`}
+    >
+      SW
     </span>
   );
 }
@@ -38,31 +47,35 @@ export function NowPlaying({ playing }: { playing: boolean }) {
 
   if (ready && !track) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-10 text-center shadow-2xl shadow-black/20">
-        <div className="text-4xl">📻</div>
-        <p className="text-sm text-[var(--muted)]">The station is off air right now.</p>
+      <div className="flex flex-col items-center justify-center gap-5 rounded-[4px] border border-[var(--rule)] bg-[var(--leaf)] p-10 text-center sm:p-14">
+        <span className="flex h-24 w-24 items-center justify-center rounded-[2px] bg-[var(--leaf-raised)]">
+          <Monogram className="text-4xl tracking-[0.08em]" />
+        </span>
+        <div>
+          <p className="type-display text-2xl leading-tight tracking-[-0.02em] text-[var(--graphite)]">
+            Off air
+          </p>
+          <p className="mt-2 text-sm text-[var(--pencil)]">
+            The station is off air right now.
+          </p>
+        </div>
       </div>
     );
   }
 
   const cover = track?.subsonic_id ? coverUrl(track.subsonic_id) : null;
   const chips = track ? tagChips(track) : [];
-  const artworkGradient = gradientFor(key);
+  const tickerLabel =
+    duration > 0
+      ? `Elapsed ${clock(elapsed)} of ${clock(duration)}`
+      : `Elapsed ${clock(elapsed)}, live`;
 
   return (
-    <article className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5 shadow-2xl shadow-black/25 sm:p-7 lg:p-9">
-      <div className="grid items-center gap-8 md:grid-cols-[minmax(17rem,40%)_minmax(0,1fr)] lg:gap-12">
-        {/* Cover and its restrained, track-derived atmosphere. */}
-        <div className="relative mx-auto w-full max-w-md md:mx-0">
-          <div
-            aria-hidden="true"
-            className="absolute inset-8 scale-105 rounded-[2rem] opacity-35 blur-3xl"
-            style={{ background: artworkGradient }}
-          />
-          <div
-            className="relative aspect-square overflow-hidden rounded-2xl bg-[var(--panel-2)] shadow-2xl shadow-black/40 ring-1 ring-white/10"
-            style={{ background: artworkGradient }}
-          >
+    <article className="grid gap-8 lg:grid-cols-[22rem_minmax(0,1fr)] lg:gap-12">
+      {/* §5.1 The plate: an 8px mat, a hairline frame, one soft shadow, no glow. */}
+      <div className="mx-auto w-full max-w-[22rem] lg:mx-0">
+        <div className="relative rounded-[4px] border border-[var(--rule)] bg-[var(--leaf)] p-2 shadow-[var(--plate-shadow)]">
+          <div className="relative aspect-square overflow-hidden rounded-[2px] bg-[var(--leaf-raised)]">
             {cover ? (
               <img
                 src={cover}
@@ -70,70 +83,87 @@ export function NowPlaying({ playing }: { playing: boolean }) {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="h-full w-full" style={{ background: artworkGradient }} />
-            )}
-
-            {playing && (
-              <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/65 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-lg backdrop-blur-md">
-                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-[var(--signal)] pulse-ring" />
-                Live
-              </div>
+              <span className="flex h-full w-full items-center justify-center">
+                <Monogram className="text-[5rem] tracking-[0.08em]" />
+              </span>
             )}
           </div>
-        </div>
 
-        {/* Editorial track metadata. */}
-        <div className="flex min-w-0 flex-col justify-center">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--signal)]">
-            Now playing
-          </p>
-
-          {!ready ? (
-            <div className="space-y-4" aria-label="Loading track information">
-              <div className="h-10 w-5/6 animate-pulse rounded bg-[var(--panel-2)]" />
-              <div className="h-6 w-1/2 animate-pulse rounded bg-[var(--panel-2)]" />
+          {/* §5.3 The ON AIR stamp. */}
+          {playing && (
+            <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-[2px] border border-[var(--rule)] bg-[var(--paper)] px-2.5 py-1">
+              <span
+                aria-hidden="true"
+                className="pulse-ring h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--ember)]"
+              />
+              <span className="text-[11px] font-semibold uppercase leading-none tracking-[0.2em] text-[var(--ember)]">
+                On air
+              </span>
             </div>
-          ) : (
-            <>
-              <h1 className="break-words text-3xl font-black leading-[1.05] tracking-[-0.04em] sm:text-4xl lg:text-5xl">
-                {track?.title || 'Unknown track'}
-              </h1>
-              <p className="mt-3 break-words text-xl font-semibold tracking-[-0.02em] text-[var(--accent)] sm:text-2xl">
-                {track?.artist || 'Unknown artist'}
-              </p>
-              {(track?.album || track?.year) && (
-                <p className="mt-2 break-words text-sm leading-relaxed text-[var(--muted)]">
-                  {track?.album}
-                  {track?.album && track?.year ? ' · ' : ''}
-                  {track?.year || ''}
-                </p>
-              )}
-
-              {chips.length > 0 && (
-                <div className="mt-6 flex flex-wrap gap-x-4 gap-y-2.5" aria-label="Track signals">
-                  {chips.map((chip, index) => (
-                    <SignalLabel key={`${chip}-${index}`}>{chip}</SignalLabel>
-                  ))}
-                </div>
-              )}
-            </>
           )}
+        </div>
+      </div>
 
-          {/* This indicates elapsed time only; live radio intentionally has no seek control. */}
-          <div className="mt-8 border-t border-[var(--line)] pt-5">
-            <div
-              aria-hidden="true"
-              className="h-1 w-full overflow-hidden rounded-full bg-[var(--panel-2)]"
-            >
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)] transition-[width] duration-1000 ease-linear"
+      {/* Editorial track metadata. */}
+      <div className="flex min-w-0 flex-col justify-center">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--pencil)]">
+          Now playing
+        </p>
+
+        {!ready ? (
+          <div className="space-y-4" aria-label="Loading track information">
+            <div className="h-10 w-5/6 animate-pulse rounded-[2px] bg-[var(--leaf-raised)]" />
+            <div className="h-6 w-1/2 animate-pulse rounded-[2px] bg-[var(--leaf-raised)]" />
+          </div>
+        ) : (
+          <>
+            <h1 className="type-display break-words text-[clamp(1.75rem,4vw,3rem)] font-semibold leading-[1.05] tracking-[-0.02em] text-[var(--graphite)]">
+              {track?.title || 'Unknown track'}
+            </h1>
+            <p className="mt-3 break-words text-[1.125rem] font-medium text-[var(--ember)]">
+              {track?.artist || 'Unknown artist'}
+            </p>
+            {(track?.album || track?.year) && (
+              <p className="mt-2 break-words text-sm leading-[1.55] text-[var(--pencil)]">
+                {track?.album}
+                {track?.album && track?.year ? ' · ' : ''}
+                {track?.year || ''}
+              </p>
+            )}
+
+            {chips.length > 0 && (
+              <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2.5" aria-label="Track signals">
+                {chips.map((chip, index) => (
+                  <span
+                    key={`${chip}-${index}`}
+                    className="max-w-full break-words text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--pencil)] underline decoration-[var(--rule)] decoration-1 underline-offset-4"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* §5.2 The ticker rule. Elapsed time only — live radio has no seek
+            control, so this carries no pointer handlers and no tab stop. */}
+        <div className="mt-8 border-t border-[var(--rule)] pt-5">
+          <div
+            role="img"
+            aria-label={tickerLabel}
+            className="flex cursor-default items-center gap-3"
+          >
+            <span className="text-[11px] tabular-nums text-[var(--pencil)]">{clock(elapsed)}</span>
+            <span aria-hidden="true" className="relative h-[2px] min-w-0 flex-1 bg-[var(--leaf-raised)]">
+              <span
+                className="absolute inset-y-0 left-0 bg-[var(--ember)] transition-[width] duration-1000 ease-linear"
                 style={{ width: `${duration > 0 ? pct : 12}%` }}
               />
-            </div>
-            <div className="mt-2 flex justify-between text-xs tabular-nums text-[var(--muted)]">
-              <span>{clock(elapsed)}</span>
-              <span>{duration > 0 ? clock(duration) : 'live'}</span>
-            </div>
+            </span>
+            <span className="text-[11px] tabular-nums text-[var(--pencil)]">
+              {duration > 0 ? clock(duration) : 'live'}
+            </span>
           </div>
         </div>
       </div>

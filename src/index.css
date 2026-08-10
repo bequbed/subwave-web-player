@@ -1,29 +1,45 @@
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------
-   Midnight Broadcast tokens. The named foundation describes the visual system;
-   the aliases keep the staged component redesigns on the existing API.
+   LONGWAVE tokens — printed matter for a station that never stops.
+   Warm unbleached paper, ink-black type, one oxidized-terracotta accent.
+   The named foundation describes the visual system; the alias layer keeps the
+   existing component API (--bg, --panel, --fg, --accent, …) resolving, so a
+   retint never needs a component edit.
    --------------------------------------------------------------------------- */
 :root {
-  --ink: #07080d;
-  --surface: rgb(16 18 27 / 88%);
-  --surface-raised: rgb(25 28 40 / 92%);
-  --foreground: #f3f5ed;
-  --metadata: #979b91;
-  --border-soft: rgb(223 230 213 / 12%);
-  --signal: #c7f36b;
-  --atmosphere: #9d8cff;
+  --paper: #f4f0e9;
+  --leaf: #fbf8f3;
+  --leaf-raised: #ebe5da;
+  --graphite: #17140f;
+  --pencil: #6b6459;
+  --rule: rgb(23 20 15 / 12%);
+  --ember: #a63d1e;
+  --tide: #17544c;
 
-  --bg: var(--ink);
-  --panel: var(--surface);
-  --panel-2: var(--surface-raised);
-  --fg: var(--foreground);
-  --muted: var(--metadata);
-  --line: var(--border-soft);
-  --accent: var(--signal);
-  --accent-2: var(--atmosphere);
+  /* Alias layer. --ink was the page black in the dark theme and doubles as the
+     on-accent text colour; on paper both roles are served by --paper. */
+  --bg: var(--paper);
+  --ink: var(--paper);
+  --panel: var(--leaf);
+  --surface: var(--leaf);
+  --panel-2: var(--leaf-raised);
+  --surface-raised: var(--leaf-raised);
+  --fg: var(--graphite);
+  --foreground: var(--graphite);
+  --muted: var(--pencil);
+  --metadata: var(--pencil);
+  --line: var(--rule);
+  --border-soft: var(--rule);
+  --signal: var(--ember);
+  --accent: var(--ember);
+  --atmosphere: var(--tide);
+  --accent-2: var(--tide);
 
-  color-scheme: dark;
+  /* The single elevation in the system: the artwork plate and the sticky rail. */
+  --plate-shadow: 0 1px 2px rgb(23 20 15 / 0.05), 0 12px 32px rgb(23 20 15 / 0.07);
+
+  color-scheme: light;
 }
 
 html,
@@ -44,17 +60,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A single top vignette instead of a glow mesh — depth without light. */
 body::before {
   position: fixed;
   z-index: 0;
   inset: 0;
   content: '';
   pointer-events: none;
-  background:
-    radial-gradient(circle at 12% 4%, color-mix(in srgb, var(--atmosphere) 25%, transparent), transparent 33rem),
-    radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--signal) 13%, transparent), transparent 28rem),
-    radial-gradient(circle at 58% 95%, color-mix(in srgb, var(--atmosphere) 12%, transparent), transparent 32rem);
-  opacity: 0.52;
+  background: linear-gradient(to bottom, rgb(23 20 15 / 3%), rgb(23 20 15 / 0%) 1200px);
 }
 
 #root {
@@ -62,23 +75,28 @@ body::before {
   z-index: 1;
 }
 
+/* The display face: system serif only, no webfont dependency. */
+.type-display {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+}
+
 /* Thin, unobtrusive scrollbars for the scrolling panels (booth feed, queue). */
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
+  scrollbar-color: var(--rule) transparent;
 }
 .scroll-thin::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: var(--line);
+  background: var(--rule);
   border-radius: 9999px;
 }
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ember) 45%, transparent);
   }
   70% {
     box-shadow: 0 0 0 6px transparent;
@@ -110,5 +128,11 @@ body::before {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
+  }
+
+  /* The ON AIR dot stops breathing but keeps a static ring, so the live state
+     stays legible without motion. */
+  .pulse-ring {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ember) 45%, transparent) !important;
   }
 }
