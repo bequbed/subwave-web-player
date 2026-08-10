@@ -33,6 +33,9 @@ export interface Player {
   tuneIn: () => void;
   /** Play if paused, pause if playing. */
   toggle: () => void;
+  /** Stop local playback and drop the source (used to hand off to a cast
+   *  session so phone and speaker never play the same stream twice). */
+  stop: () => void;
   setVolume: (v: number) => void;
   toggleMute: () => void;
 }
@@ -170,6 +173,7 @@ export function usePlayer(): Player {
     muted,
     tuneIn: play,
     toggle: () => (playing ? stop() : play()),
+    stop,
     setVolume: (v: number) => setVolumeState(Math.min(1, Math.max(0, v))),
     toggleMute: () => setMuted((m) => !m),
   };

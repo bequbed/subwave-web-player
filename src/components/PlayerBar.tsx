@@ -5,7 +5,9 @@
 // LONGWAVE: no longer a card — a rule-bounded bar that sticks to the bottom of
 // the viewport below `lg`, so the Tune In gesture is always within thumb reach.
 
+import { useEffect } from 'react';
 import { useStationFeed } from '@/hooks/useStationFeed';
+import { useCast } from '@/hooks/useCast';
 import type { Player } from '@/hooks/usePlayer';
 import { compact } from '@/lib/format';
 
@@ -28,6 +30,16 @@ function Spinner() {
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden className="animate-spin">
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.3" strokeWidth="3" />
       <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** The Cast glyph — broadcast waves into a base. Monochrome ink by default,
+ *  ember when a session is active. */
+function CastIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
+      <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
     </svg>
   );
 }
@@ -70,8 +82,22 @@ function Vital({ label, value }: { label: string; value: string }) {
 
 export function PlayerBar({ player }: { player: Player }) {
   const { nowPlaying } = useStationFeed();
+  const cast = useCast();
+  const casting = cast.state === 'connected';
+  const castConnecting = cast.state === 'connecting';
   const bitrate = nowPlaying?.streamBitrate ?? null;
   const tokens = nowPlaying?.llmTokens ?? null;
+
+  // When a cast session takes over, hand local playback off — the speaker is
+  // now the room's output, and two copies of the same live stream would echo
+  // across the house. Disconnecting never force-starts local audio: the live
+  // stream goes stale while paused, and auto-playing without a fresh gesture
+  // would be surprising (and often blocked by autoplay policy).
+  useEffect(() => {
+    if (cast.state === 'connected') player.stop();
+    // player's functions are stable per mount; only the cast transition matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cast.state]);
 
   const {
     playing,
@@ -96,13 +122,34 @@ export function PlayerBar({ player }: { player: Player }) {
           ? 'Selecting quality…'
           : null;
 
-  const buttonLabel = playing ? 'Pause' : tunedIn ? 'Play' : 'Tune in';
-  const stateTitle = loading ? 'Buffering…' : playing ? 'On air' : tunedIn ? 'Paused' : 'Ready to listen';
-  const stateDetail = playing
-    ? 'Live signal connected'
-    : tunedIn
-      ? 'Tune in again at the live edge'
-      : 'Live radio · no rewind';
+  const busy = loading || castConnecting;
+  const buttonLabel = casting
+    ? 'Stop cast'
+    : castConnecting
+      ? 'Connecting…'
+      : playing
+        ? 'Pause'
+        : tunedIn
+          ? 'Play'
+          : 'Tune in';
+  const stateTitle = casting
+    ? 'On speakers'
+    : castConnecting
+      ? 'Connecting…'
+      : loading
+        ? 'Buffering…'
+        : playing
+          ? 'On air'
+          : tunedIn
+            ? 'Paused'
+            : 'Ready to listen';
+  const stateDetail = casting
+    ? `Casting to ${cast.deviceName ?? 'speaker'}`
+    : playing
+      ? 'Live signal connected'
+      : tunedIn
+        ? 'Tune in again at the live edge'
+        : 'Live radio · no rewind';
 
   const level = muted || volume === 0 ? 'mute' : volume < 0.5 ? 'low' : 'high';
 
@@ -117,12 +164,13 @@ export function PlayerBar({ player }: { player: Player }) {
         {/* The only transport: tune in at the live edge or pause. */}
         <div className="flex min-w-0 items-center gap-4 lg:flex-1">
           <button
-            onClick={toggle}
-            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2.5 rounded-[4px] bg-[var(--ember)] px-4 text-[13px] font-semibold uppercase tracking-[0.12em] sm:px-5 sm:tracking-[0.14em] text-[var(--paper)] transition-[filter,transform] hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)]"
+            onClick={() => (casting ? void cast.stop() : toggle())}
+            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2.5 rounded-[4px] bg-[var(--ember)] px-4 text-[13px] font-semibold uppercase tracking-[0.12em] sm:px-5 sm:tracking-[0.14em] text-[var(--paper)] transition-[filter,transform] hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)] disabled:pointer-events-none disabled:opacity-60"
             aria-label={buttonLabel}
-            aria-busy={loading}
+            aria-busy={busy}
+            disabled={castConnecting}
           >
-            {loading ? <Spinner /> : playing ? <PauseIcon /> : <PlayIcon />}
+            {busy ? <Spinner /> : playing || casting ? <PauseIcon /> : <PlayIcon />}
             <span>{buttonLabel}</span>
           </button>
 
@@ -135,12 +183,19 @@ export function PlayerBar({ player }: { player: Player }) {
         </div>
 
         <div className="flex items-center justify-between gap-4 sm:gap-6 lg:justify-end lg:gap-8">
-          {/* Volume remains the only continuous control. */}
-          <div className="flex min-w-0 flex-1 items-center gap-3 sm:w-44 sm:flex-none">
+          {/* Volume is local-only; while casting, the speaker's own volume
+              applies and this control is dimmed (the cast dialog has its own). */}
+          <div
+            className={`flex min-w-0 flex-1 items-center gap-3 sm:w-44 sm:flex-none ${
+              casting ? 'pointer-events-none opacity-40' : ''
+            }`}
+            title={casting ? 'Speaker volume is set from the cast dialog' : undefined}
+          >
             <button
               onClick={toggleMute}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] text-[var(--pencil)] transition-colors hover:bg-[var(--leaf-raised)] hover:text-[var(--graphite)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] text-[var(--pencil)] transition-colors hover:bg-[var(--leaf-raised)] hover:text-[var(--graphite)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)] disabled:pointer-events-none"
               aria-label={muted ? 'Unmute' : 'Mute'}
+              disabled={casting}
             >
               <SpeakerIcon level={level} />
             </button>
@@ -151,8 +206,9 @@ export function PlayerBar({ player }: { player: Player }) {
               step={0.01}
               value={muted ? 0 : volume}
               onChange={(e) => setVolume(Number(e.target.value))}
-              className="h-[2px] min-w-0 flex-1 cursor-pointer appearance-none bg-[var(--leaf-raised)] accent-[var(--ember)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--paper)]"
+              className="h-[2px] min-w-0 flex-1 cursor-pointer appearance-none bg-[var(--leaf-raised)] accent-[var(--ember)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--paper)] disabled:pointer-events-none"
               aria-label="Volume"
+              disabled={casting}
             />
           </div>
 
@@ -170,6 +226,39 @@ export function PlayerBar({ player }: { player: Player }) {
             {bitrate != null && <Vital label="kbps" value={String(bitrate)} />}
             {tokens != null && <Vital label="DJ tokens" value={compact(tokens)} />}
           </div>
+
+          {/* Cast: rendered only where the SDK is loaded and cast devices are
+              in range (Chrome on desktop + Android, same Wi-Fi). Idle → opens
+              the device picker; connected → ends the session. */}
+          {cast.supported && (
+            <button
+              onClick={() => (casting ? void cast.stop() : void cast.cast())}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)] disabled:pointer-events-none disabled:opacity-60 ${
+                casting
+                  ? 'bg-[var(--leaf-raised)] text-[var(--ember)]'
+                  : 'text-[var(--pencil)] hover:bg-[var(--leaf-raised)] hover:text-[var(--graphite)]'
+              }`}
+              aria-label={
+                castConnecting
+                  ? 'Connecting to speaker'
+                  : casting
+                    ? `Stop casting to ${cast.deviceName ?? 'speaker'}`
+                    : 'Cast to speaker'
+              }
+              aria-pressed={casting}
+              aria-busy={castConnecting}
+              title={
+                castConnecting
+                  ? 'Connecting to speaker'
+                  : casting
+                    ? 'Stop casting'
+                    : 'Cast to speaker'
+              }
+              disabled={castConnecting}
+            >
+              <CastIcon />
+            </button>
+          )}
         </div>
       </div>
     </div>

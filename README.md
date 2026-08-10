@@ -147,6 +147,7 @@ controller's CORS and the Icecast mount are both wide open.
 | Request a track — plain-language song requests with live status | `POST /request` + `/request/:id` |
 | Weekly schedule — the 7×24 grid painted in station-local time | `/schedule` |
 | Play/pause + lock-screen controls (MediaSession) | `/stream.mp3`, `/cover/:id` |
+| Cast to Google speakers / Chromecast — Chrome on desktop + Android, same Wi-Fi as the speakers | Cast Web Sender SDK (built-in Default Media Receiver, no registration) |
 
 ## Architecture — the one thing to understand before redesigning
 
@@ -166,6 +167,7 @@ src/
     useRequest       #   submit a request + poll its outcome
     useSchedule      #   fetch /schedule once
     useMediaSession  #   OS lock-screen metadata + artwork
+    useCast          #   Google Cast: cast the live stream to a speaker/Chromecast
 
   components/        # ── PRESENTATION — redesign this ──
     NowPlaying · PlayerBar · OnAir · BoothFeed · Queue · RequestBox · Schedule
@@ -186,6 +188,11 @@ single component.
   stray headphone tap can't skip for the whole room.
 - **Autoplay needs a gesture.** Playback starts on the first tap (the "tune in"
   button) — browsers block autoplay with sound.
+- **Casting hands the stream to the speaker.** The cast button (Chrome on
+  desktop/Android, same Wi-Fi) makes the speaker fetch the stream URL itself —
+  the phone just steers. Local playback pauses while casting; the speaker shows
+  the station name (the Default Media Receiver only displays load-time
+  metadata). Not supported on iOS/Firefox — the button simply never renders.
 - **The track clock is approximate.** The server doesn't stream a playhead, so
   the progress bar counts client-side and re-syncs on every track change.
 

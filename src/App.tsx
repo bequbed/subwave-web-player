@@ -7,6 +7,7 @@
 
 import { StationFeedProvider, useStationFeed } from '@/hooks/useStationFeed';
 import { usePlayer } from '@/hooks/usePlayer';
+import { useCast } from '@/hooks/useCast';
 import { useMediaSession } from '@/hooks/useMediaSession';
 import { config } from '@/config';
 import { listenerCount } from '@/lib/format';
@@ -67,12 +68,20 @@ function Masthead() {
 
 function PlayerView() {
   const player = usePlayer();
+  const cast = useCast();
   const { nowPlaying } = useStationFeed();
   const track = nowPlaying?.nowPlaying ?? null;
 
   useMediaSession(track, nowPlaying?.dj?.station, player.playing, {
-    onPlay: player.tuneIn,
-    onPause: player.toggle,
+    // While a cast session owns the room, the phone's transport (lock screen,
+    // headphone buttons) must not start a second copy of the stream locally —
+    // same "stray tap must not disturb the shared stream" rule as skip/seek.
+    onPlay: () => {
+      if (cast.state !== 'connected') player.tuneIn();
+    },
+    onPause: () => {
+      if (cast.state !== 'connected') player.toggle();
+    },
   });
 
   return (

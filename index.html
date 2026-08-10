@@ -12,6 +12,20 @@
     />
     <meta name="description" content="A reference web player for a SUB/WAVE internet radio station." />
     <title>SUB/WAVE — Web Player</title>
+    <!-- Google Cast Web Sender SDK. The SDK calls __onGCastApiAvailable when it
+         finishes loading (must be registered before the async script runs); the
+         app gates its cast button on that signal. Unsupporting browsers never
+         fire it, so there the cast button simply never renders. -->
+    <script>
+      window.__onGCastApiAvailable = function (isAvailable) {
+        window.__castApiAvailable = isAvailable;
+        window.dispatchEvent(new CustomEvent('cast-api-ready', { detail: isAvailable }));
+      };
+    </script>
+    <script
+      src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"
+      async
+    ></script>
   </head>
   <body>
     <div id="root"></div>
