@@ -316,6 +316,7 @@ export function useCast(): Cast {
     resetSessionState();
     setStreamMode(null);
     setLoadError(null);
+    setReceiverMedia(null);
     setDeviceName(safeFriendlyName(session));
   }
 
@@ -330,6 +331,7 @@ export function useCast(): Cast {
     resetSessionState();
     setStreamMode(null);
     setLoadError(null);
+    setReceiverMedia(null);
   }
 
   /** Attempt- and session-guarded teardown shared by every failure path.
@@ -596,6 +598,7 @@ export function useCast(): Cast {
       const session = context.getCurrentSession();
       if (!session) {
         setReceiverState('unknown');
+        setReceiverMedia(null);
         return;
       }
       // A session we never saw start (auto-join after a page reload, or one
@@ -612,18 +615,26 @@ export function useCast(): Cast {
       const idleReason = media?.idleReason ?? undefined;
       // Receiver's own view of the loaded media: the duration it derived from
       // the HTTP response and the position it believes it is at. A finite
-      // duration means the fake Content-Range total leaked through and the
-      // receiver built a seekable window (the rail surfaces this).
+      // positive duration means the fake Content-Range total leaked through and
+      // the receiver built a seekable window (the rail surfaces this);
+      // absent/endless is the healthy shape.
       const m = media?.media;
-      setReceiverMedia(
-        m && typeof m.duration === 'number' && m.duration > 0
-          ? {
-              duration: m.duration,
-              currentTime: media?.currentTime ?? null,
-              contentId: m.contentId,
-            }
-          : null,
-      );
+      const mDuration = m?.duration;
+      if (
+        m &&
+        typeof m.contentId === 'string' &&
+        typeof mDuration === 'number' &&
+        Number.isFinite(mDuration) &&
+        mDuration > 0
+      ) {
+        setReceiverMedia({
+          duration: mDuration,
+          currentTime: media?.currentTime ?? null,
+          contentId: m.contentId,
+        });
+      } else {
+        setReceiverMedia(null);
+      }
       if (ps === 'PLAYING') sawPlaying = true;
       // A receiver that is paused or was stopped on the device has the media
       // and is deliberately not playing it. Disarm permanently: the elapsed

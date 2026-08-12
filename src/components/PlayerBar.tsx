@@ -173,7 +173,9 @@ export function PlayerBar({ player }: { player: Player }) {
   // cast pipeline exists to prevent); absent/endless is the healthy shape.
   const receiverDuration = cast.receiverMedia?.duration;
   const receiverView =
-    typeof receiverDuration === 'number' && receiverDuration > 0
+    typeof receiverDuration === 'number' &&
+    Number.isFinite(receiverDuration) &&
+    receiverDuration > 0
       ? ` · receiver window ${(receiverDuration / 3600).toFixed(1)}h`
       : '';
   const stateDetail = casting

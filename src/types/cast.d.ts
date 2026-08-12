@@ -98,7 +98,8 @@ declare global {
      *  'FINISHED' | 'CANCELLED' | 'INTERRUPTED' | 'ERROR'. Null/absent when the
      *  receiver is idle because nothing has started yet. */
     idleReason?: string | null;
-    /** Position (s) the receiver believes it is at in the loaded media. */
+    /** Position (s) the receiver believes it is at in the loaded media.
+     *  Optional defensively: partial SDK payloads have been observed. */
     currentTime?: number | null;
     /** The MediaInformation the receiver loaded — including the duration it
      *  derived from the HTTP response and the exact contentId it was handed.
@@ -108,7 +109,7 @@ declare global {
       contentId: string;
       contentType?: string;
       streamType?: string;
-      duration: number | null;
+      duration?: number | null;
     } | null;
   }
 
