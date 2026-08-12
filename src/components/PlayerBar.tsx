@@ -171,26 +171,8 @@ export function PlayerBar({ player }: { player: Player }) {
         ? `playing · t+${Math.round(cast.receiverPosition)}s`
         : 'warming up… (audio starts in a few minutes)'
       : rawStatus;
-  // 'live' only ever appears if the watchdog had to re-load in the other
-  // stream mode, so showing it is worth the extra words — it says which path
-  // the receiver was last asked for.
-  const castMode = cast.streamMode === 'live' ? ' (live mode)' : '';
-  // A failed retry is reported rather than swallowed: the receiver state alone
-  // can look identical to a healthy one that simply hasn't started yet.
-  const castProblem = cast.loadError ? ` · ${cast.loadError}` : '';
-  // The receiver's derived duration: a finite number means it built a seekable
-  // window out of Icecast's fake Content-Range total (the failure this whole
-  // cast pipeline exists to prevent); absent/endless is the healthy shape.
-  const rm = cast.receiverMedia;
-  const receiverWindow =
-    rm &&
-    typeof rm.duration === 'number' &&
-    Number.isFinite(rm.duration) &&
-    rm.duration > 0
-      ? ` · receiver window ${(rm.duration / 3600).toFixed(1)}h`
-      : '';
   const stateDetail = casting
-    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${playingLabel}${castMode}${castProblem}${receiverWindow}`
+    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${playingLabel}`
     : cast.castError
       ? cast.castError
       : playing
@@ -275,37 +257,82 @@ export function PlayerBar({ player }: { player: Player }) {
             {tokens != null && <Vital label="DJ tokens" value={compact(tokens)} />}
           </div>
 
-          {/* Cast: rendered only where the SDK is loaded and cast devices are
-              in range (Chrome on desktop + Android, same Wi-Fi). Idle → opens
-              the device picker; connected → ends the session. */}
+          {/* Cast: drives the server-side bridge (works in every browser —
+              no Google web-sender SDK, no same-Wi-Fi requirement for the
+              sender). Idle → opens the speaker list; connected → ends the
+              session. */}
           {cast.supported && (
-            <button
-              onClick={() => (casting ? void cast.stop() : void cast.cast())}
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)] disabled:pointer-events-none disabled:opacity-60 ${
-                casting
-                  ? 'bg-[var(--leaf-raised)] text-[var(--ember)]'
-                  : 'text-[var(--pencil)] hover:bg-[var(--leaf-raised)] hover:text-[var(--graphite)]'
-              }`}
-              aria-label={
-                castConnecting
-                  ? 'Connecting to speaker'
-                  : casting
-                    ? `Stop casting to ${cast.deviceName ?? 'speaker'}`
-                    : 'Cast to speaker'
-              }
-              aria-pressed={casting}
-              aria-busy={castConnecting}
-              title={
-                castConnecting
-                  ? 'Connecting to speaker'
-                  : casting
-                    ? 'Stop casting'
-                    : 'Cast to speaker'
-              }
-              disabled={castConnecting}
-            >
-              <CastIcon />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => (casting ? void cast.stop() : void cast.cast())}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)] disabled:pointer-events-none disabled:opacity-60 ${
+                  casting
+                    ? 'bg-[var(--leaf-raised)] text-[var(--ember)]'
+                    : 'text-[var(--pencil)] hover:bg-[var(--leaf-raised)] hover:text-[var(--graphite)]'
+                }`}
+                aria-label={
+                  castConnecting
+                    ? 'Connecting to speaker'
+                    : casting
+                      ? `Stop casting to ${cast.deviceName ?? 'speaker'}`
+                      : 'Cast to speaker'
+                }
+                aria-pressed={casting}
+                aria-busy={castConnecting}
+                aria-haspopup="listbox"
+                aria-expanded={cast.devices !== null}
+                title={
+                  castConnecting
+                    ? 'Connecting to speaker'
+                    : casting
+                      ? 'Stop casting'
+                      : 'Cast to speaker'
+                }
+                disabled={castConnecting}
+              >
+                <CastIcon />
+              </button>
+
+              {/* Speaker picker — the bridge's device list, rendered in-page
+                  (no native cast dialog involved). */}
+              {cast.devices && (
+                <div
+                  role="listbox"
+                  aria-label="Choose a speaker"
+                  className="absolute bottom-full right-0 z-40 mb-2 w-64 overflow-hidden rounded-[6px] border border-[var(--rule)] bg-[var(--panel)] shadow-[var(--plate-shadow)]"
+                >
+                  <div className="flex items-center justify-between border-b border-[var(--rule)] px-3 py-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--pencil)]">
+                      Cast to…
+                    </span>
+                    <button
+                      onClick={cast.closePicker}
+                      aria-label="Close speaker list"
+                      className="flex h-6 w-6 items-center justify-center rounded-[4px] text-[var(--pencil)] hover:bg-[var(--leaf-raised)] hover:text-[var(--graphite)]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <ul className="max-h-64 overflow-y-auto py-1">
+                    {cast.devices.map((d) => (
+                      <li key={d.name} role="option" aria-selected={cast.deviceName === d.name}>
+                        <button
+                          onClick={() => void cast.castTo(d.name)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--graphite)] hover:bg-[var(--leaf-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ember)]"
+                        >
+                          <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                          {d.cast_type === 'group' && (
+                            <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-[var(--pencil)]">
+                              group
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

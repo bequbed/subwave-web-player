@@ -22,6 +22,18 @@ export const config = {
   mp3StreamUrl: `${STATION_URL}/stream.mp3`,
   /** The lossless Icecast mount, preferred when the browser supports FLAC. */
   flacStreamUrl: `${STATION_URL}/stream.flac`,
+  /**
+   * Server-side cast agent. The Google Cast Web Sender SDK (CAF) proved
+   * unreliable for this deployment (requestSession fails/hangs on the
+   * sender), while a pychromecast bridge on the LAN casts the same stream
+   * to the same speakers every time. So the player drives speakers through
+   * the bridge instead of the CAF SDK — it even works on iOS/Firefox and
+   * from mobile data (the server does the LAN part).
+   */
+  castBridgeUrl: `${STATION_URL}/cast-bridge`,
+  /** Shared token for the cast bridge (homelab-grade; the bridge 401s
+   *  without it). Override with VITE_CAST_TOKEN when rotating. */
+  castToken: import.meta.env.VITE_CAST_TOKEN ?? '08745ccd338ecf1e06f76b9f06b360b6',
   /** How often the live feed (now-playing / state / session) is polled. */
   pollIntervalMs: 5000,
 } as const;
