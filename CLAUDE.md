@@ -76,12 +76,20 @@ mount are both `Access-Control-Allow-Origin: *`.
 - `useMediaSession` wires OS lock-screen metadata + artwork. **Next/prev/seek are
   intentionally left unwired** — a stray headphone tap must not skip a shared
   live stream. Only play/pause are meaningful.
-- `useCast` (server-side cast bridge) makes the speaker play the stream
-  itself, steered through a pychromecast agent on the station's LAN (the
-  Google Cast Web Sender SDK proved unreliable at the session layer on this
-  deployment — requestSession fails/hangs on the sender). The speaker list
-  comes from the bridge, the button works in every browser, and PlayerBar
+- `useCast` (Google Cast) makes the speaker play the stream itself. It only
+  renders a button when the Cast SDK loaded and devices are in range (Chrome on
+  desktop/Android, same Wi-Fi — iOS/Firefox never render it). Uses the built-in
+  Default Media Receiver (`CC1AD845`, no registration); the speaker fetches
+  `stream.mp3` directly and shows the load-time metadata snapshot. PlayerBar
   pauses local playback while a session is active.
+
+### Cast SDK wiring
+
+`index.html` loads the Cast Web Sender SDK async from gstatic and registers a
+`__onGCastApiAvailable` bridge that dispatches a `cast-api-ready` window event.
+`useCast` awaits that (8s timeout — a blocked script degrades to "no button",
+never a hang). Ambient types live in `src/types/cast.d.ts` — only the surface
+the hook uses; keep them in sync with the SDK if you extend it.
 
 ### Public API consumed
 
