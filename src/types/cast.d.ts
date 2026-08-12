@@ -98,6 +98,18 @@ declare global {
      *  'FINISHED' | 'CANCELLED' | 'INTERRUPTED' | 'ERROR'. Null/absent when the
      *  receiver is idle because nothing has started yet. */
     idleReason?: string | null;
+    /** Position (s) the receiver believes it is at in the loaded media. */
+    currentTime?: number | null;
+    /** The MediaInformation the receiver loaded — including the duration it
+     *  derived from the HTTP response and the exact contentId it was handed.
+     *  A finite duration here means a seekable window was built (bad for this
+     *  live mount); -1/absent means endless (the healthy shape). */
+    media?: {
+      contentId: string;
+      contentType?: string;
+      streamType?: string;
+      duration: number | null;
+    } | null;
   }
 
   /** Legacy `chrome.cast` model — the classes loadMedia() consumes. */

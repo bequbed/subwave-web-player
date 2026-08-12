@@ -168,8 +168,16 @@ export function PlayerBar({ player }: { player: Player }) {
   // A failed retry is reported rather than swallowed: the receiver state alone
   // can look identical to a healthy one that simply hasn't started yet.
   const castProblem = cast.loadError ? ` · ${cast.loadError}` : '';
+  // The receiver's derived duration: a finite number means it built a seekable
+  // window out of Icecast's fake Content-Range total (the failure this whole
+  // cast pipeline exists to prevent); absent/endless is the healthy shape.
+  const receiverDuration = cast.receiverMedia?.duration;
+  const receiverView =
+    typeof receiverDuration === 'number' && receiverDuration > 0
+      ? ` · receiver window ${(receiverDuration / 3600).toFixed(1)}h`
+      : '';
   const stateDetail = casting
-    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}${castProblem}`
+    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}${castProblem}${receiverView}`
     : playing
       ? 'Live signal connected'
       : tunedIn

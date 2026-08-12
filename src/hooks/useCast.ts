@@ -70,6 +70,20 @@ export type ReceiverState =
  *  the watchdog below had to fall back to it. */
 export type StreamMode = 'buffered' | 'live';
 
+/** The receiver's own view of the loaded media — the ground truth for what
+ *  the speaker believes it is playing. A finite `duration` here means the
+ *  receiver built a seekable window out of Icecast's fake Content-Range total
+ *  (the exact failure this module exists to prevent); `null`/`-1`/endless is
+ *  the healthy shape. `contentId` is the URL it was handed, with the ?t= bust. */
+export interface ReceiverMediaView {
+  /** Seconds, as derived by the receiver (a finite number = fake window leaked). */
+  duration: number | null;
+  /** Position (s) the receiver believes it is at. */
+  currentTime: number | null;
+  /** The URL the receiver is (or was asked to) play. */
+  contentId: string;
+}
+
 /** If a load was accepted but the receiver shows no sign of playing it — no
  *  media session at all, or IDLE / an error — reload once in the other stream
  *  mode. Covers the case where a receiver firmware behaves the opposite way
@@ -258,6 +272,10 @@ export interface Cast {
   /** Receiver-reported media state ('playing'/'buffering'/'idle'...), polled
    *  once a second while a session is active. */
   receiverState: ReceiverState;
+  /** The receiver's own view of the loaded media (derived duration, position,
+   *  URL), polled alongside receiverState. Null while not casting or when the
+   *  receiver reports no media session. */
+  receiverMedia: ReceiverMediaView | null;
   /** Which stream mode the receiver was last asked for, or null when nothing
    *  has been loaded. Set the moment a load is *dispatched*, so a hung or
    *  failed fallback can never leave the rail claiming the mode that already
@@ -281,6 +299,7 @@ export function useCast(): Cast {
   const [state, setState] = useState<CastState>('unavailable');
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [receiverState, setReceiverState] = useState<ReceiverState>('unknown');
+  const [receiverMedia, setReceiverMedia] = useState<ReceiverMediaView | null>(null);
   const [streamMode, setStreamMode] = useState<StreamMode | null>(streamModeValue);
   const [loadError, setLoadError] = useState<string | null>(loadErrorValue);
   // Fresh snapshot for the (once-mounted) event handler closure.
@@ -349,7 +368,17 @@ export function useCast(): Cast {
     const track = nowPlayingRef.current?.nowPlaying ?? null;
     const station = nowPlayingRef.current?.dj?.station;
 
-    const mediaInfo = new cc.media.MediaInfo(config.mp3StreamUrl, 'audio/mpeg');
+    const mediaInfo = new cc.media.MediaInfo(
+      // Cache-bust the cast URL, mirroring usePlayer's local-playback trick:
+      // the Default Media Receiver caches media by URL, and a stale entry from
+      // an earlier broken load would otherwise satisfy the load from cache —
+      // the receiver reports PLAYING, never fetches the origin, and plays
+      // silence. A fresh ?t= forces a real fetch on every cast, and makes each
+      // cast visible in the server logs (the no-fetch signature is the
+      // receiver's silent failure mode).
+      `${config.mp3StreamUrl}?t=${Date.now()}`,
+      'audio/mpeg',
+    );
     mediaInfo.streamType =
       mode === 'live' ? cc.media.StreamType.LIVE : cc.media.StreamType.BUFFERED;
     if (mode === 'live') {
@@ -555,6 +584,7 @@ export function useCast(): Cast {
   useEffect(() => {
     if (state !== 'connected') {
       setReceiverState('unknown');
+      setReceiverMedia(null);
       setStreamMode(null);
       setLoadError(null);
       return;
@@ -580,6 +610,20 @@ export function useCast(): Cast {
       const media = session.getMediaSession();
       const ps = media?.playerState;
       const idleReason = media?.idleReason ?? undefined;
+      // Receiver's own view of the loaded media: the duration it derived from
+      // the HTTP response and the position it believes it is at. A finite
+      // duration means the fake Content-Range total leaked through and the
+      // receiver built a seekable window (the rail surfaces this).
+      const m = media?.media;
+      setReceiverMedia(
+        m && typeof m.duration === 'number' && m.duration > 0
+          ? {
+              duration: m.duration,
+              currentTime: media?.currentTime ?? null,
+              contentId: m.contentId,
+            }
+          : null,
+      );
       if (ps === 'PLAYING') sawPlaying = true;
       // A receiver that is paused or was stopped on the device has the media
       // and is deliberately not playing it. Disarm permanently: the elapsed
@@ -696,6 +740,7 @@ export function useCast(): Cast {
     state,
     deviceName,
     receiverState,
+    receiverMedia,
     streamMode,
     loadError,
     supported: state !== 'unavailable',
