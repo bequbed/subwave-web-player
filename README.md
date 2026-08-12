@@ -147,7 +147,7 @@ controller's CORS and the Icecast mount are both wide open.
 | Request a track — plain-language song requests with live status | `POST /request` + `/request/:id` |
 | Weekly schedule — the 7×24 grid painted in station-local time | `/schedule` |
 | Play/pause + lock-screen controls (MediaSession) | `/stream.mp3`, `/cover/:id` |
-| Cast to Google speakers / Chromecast — Chrome on desktop + Android, same Wi-Fi as the speakers | Cast Web Sender SDK (built-in Default Media Receiver, no registration) |
+| Cast to Google speakers / Chromecast — any browser, any network (the server-side cast bridge does the LAN part) | `radio.plexservernz.org/cast-bridge` (pychromecast agent + shared token) |
 
 ## Architecture — the one thing to understand before redesigning
 
