@@ -159,8 +159,18 @@ export function PlayerBar({ player }: { player: Player }) {
             ? 'Paused'
             : 'Ready to listen';
   // Receiver-reported media state while casting — the ground truth for
-  // "connected but silent" (idle = load accepted, not playing).
-  const receiverStatus = RECEIVER_STATUS[cast.receiverState];
+  // "connected but silent". 'playing' is NOT the same as audible on this
+  // deployment: the Default Media Receiver reports PLAYING immediately after
+  // a load, then takes 1.5–3 minutes to actually start audio (currentTime
+  // frozen at 0 the whole time). So while the state is 'playing', the rail
+  // says "warming up…" until the receiver's clock starts moving.
+  const rawStatus = RECEIVER_STATUS[cast.receiverState];
+  const playingLabel =
+    cast.receiverState === 'playing'
+      ? typeof cast.receiverPosition === 'number' && cast.receiverPosition > 0
+        ? `playing · t+${Math.round(cast.receiverPosition)}s`
+        : 'warming up… (audio starts in a few minutes)'
+      : rawStatus;
   // 'live' only ever appears if the watchdog had to re-load in the other
   // stream mode, so showing it is worth the extra words — it says which path
   // the receiver was last asked for.
@@ -179,20 +189,15 @@ export function PlayerBar({ player }: { player: Player }) {
     rm.duration > 0
       ? ` · receiver window ${(rm.duration / 3600).toFixed(1)}h`
       : '';
-  // Live playback position as the receiver reports it. Advancing = it is
-  // genuinely decoding the stream; stuck at ~0 while 'playing' = it believes
-  // it is playing something that is not our live audio.
-  const receiverPosition =
-    rm && typeof rm.currentTime === 'number' && rm.currentTime > 0
-      ? ` · t+${Math.round(rm.currentTime)}s`
-      : '';
   const stateDetail = casting
-    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}${castProblem}${receiverWindow}${receiverPosition}`
-    : playing
-      ? 'Live signal connected'
-      : tunedIn
-        ? 'Tune in again at the live edge'
-        : 'Live radio · no rewind';
+    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${playingLabel}${castMode}${castProblem}${receiverWindow}`
+    : cast.castError
+      ? cast.castError
+      : playing
+        ? 'Live signal connected'
+        : tunedIn
+          ? 'Tune in again at the live edge'
+          : 'Live radio · no rewind';
 
   const level = muted || volume === 0 ? 'mute' : volume < 0.5 ? 'low' : 'high';
 

@@ -282,6 +282,15 @@ export interface Cast {
   /** Receiver-reported media state ('playing'/'buffering'/'idle'...), polled
    *  once a second while a session is active. */
   receiverState: ReceiverState;
+  /** Live playback position (s) the receiver reports, or null while no media
+   *  session is attached. The rail shows "warming up…" while the state is
+   *  'playing' but this stays 0 — the Default Media Receiver on this
+   *  deployment takes 1.5–3 minutes to actually start audio after a load,
+   *  and during that window it reports PLAYING with a frozen clock. */
+  receiverPosition: number | null;
+  /** Set when opening the device picker fails (requestSession rejected or
+   *  hung). Rendered in the rail so a dead cast button is never silent. */
+  castError: string | null;
   /** The receiver's own view of the loaded media (derived duration, position,
    *  URL), polled alongside receiverState. Null while not casting or when the
    *  receiver reports no media session. */
@@ -309,6 +318,8 @@ export function useCast(): Cast {
   const [state, setState] = useState<CastState>('unavailable');
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [receiverState, setReceiverState] = useState<ReceiverState>('unknown');
+  const [receiverPosition, setReceiverPosition] = useState<number | null>(null);
+  const [castError, setCastError] = useState<string | null>(null);
   const [receiverMedia, setReceiverMedia] = useState<ReceiverMediaView | null>(null);
   const [streamMode, setStreamMode] = useState<StreamMode | null>(streamModeValue);
   const [loadError, setLoadError] = useState<string | null>(loadErrorValue);
@@ -597,6 +608,7 @@ export function useCast(): Cast {
     if (state !== 'connected') {
       setReceiverState('unknown');
       setReceiverMedia(null);
+      setReceiverPosition(null);
       setStreamMode(null);
       setLoadError(null);
       return;
@@ -623,6 +635,10 @@ export function useCast(): Cast {
       const media = session.getMediaSession();
       const ps = media?.playerState;
       const idleReason = media?.idleReason ?? undefined;
+      // Live playback position — the honest "is it actually playing" tell.
+      setReceiverPosition(
+        typeof media?.currentTime === 'number' ? media.currentTime : null,
+      );
       // Receiver's own view of the loaded media: the duration it derived from
       // the HTTP response and the position it believes it is at. A finite
       // positive duration means the fake Content-Range total leaked through and
@@ -711,6 +727,7 @@ export function useCast(): Cast {
     const context = framework.CastContext.getInstance();
 
     startInFlight = true;
+    setCastError(null);
     const token = ++attemptToken;
     pendingStartAttempt = token;
     pendingStart = true;
@@ -720,18 +737,32 @@ export function useCast(): Cast {
     setStreamMode(null);
     setLoadError(null);
     try {
-      // Opens the picker and resolves once the user picks a device (or the
-      // picker is dismissed). It does NOT carry the session — the session
-      // events above load media as soon as one attaches; this path is the
-      // fallback for when the session is already readable here.
-      await context.requestSession();
+      // requestSession opens the picker and settles when the user picks a
+      // device (or dismisses it). A hung picker must never leave the hook
+      // stuck in 'connecting' — every later tap would silently no-op — so
+      // race it against a 45s guard and recover to idle.
+      const rs = context.requestSession();
+      const guard = new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 45000);
+      });
+      await Promise.race([rs, guard]);
       if (attemptToken !== token) return; // stop/start/disconnect superseded us
       const session = context.getCurrentSession();
-      if (session) consumePendingStart(context, session);
-      // If no session is readable yet, the pending flag stays set:
-      // SESSION_STARTED / CONNECTED — or, failing both, the 1s poll — consume
-      // it the moment one is.
-    } catch {
+      if (!session) {
+        // The picker never settled (or was dismissed without settling).
+        setCastError('Cast picker timed out — tap the cast button to retry');
+        teardownAttempt(context, token);
+        return;
+      }
+      consumePendingStart(context, session);
+    } catch (err) {
+      // Dismissing the picker rejects — that is a success-no-op, not an
+      // error. Anything else is a real failure and must be visible.
+      const code = (err as { code?: string | number } | null)?.code ?? '';
+      if (!['cancel', 'CANCEL', 'cancel_requested', 'CANCELED'].includes(String(code))) {
+        console.warn('[cast] requestSession failed:', err);
+        setCastError('Cast picker failed — tap the cast button to retry');
+      }
       teardownAttempt(context, token);
     } finally {
       // Release the in-flight guard only, and only if this attempt is still
@@ -761,6 +792,8 @@ export function useCast(): Cast {
     state,
     deviceName,
     receiverState,
+    receiverPosition,
+    castError,
     receiverMedia,
     streamMode,
     loadError,
