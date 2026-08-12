@@ -171,15 +171,23 @@ export function PlayerBar({ player }: { player: Player }) {
   // The receiver's derived duration: a finite number means it built a seekable
   // window out of Icecast's fake Content-Range total (the failure this whole
   // cast pipeline exists to prevent); absent/endless is the healthy shape.
-  const receiverDuration = cast.receiverMedia?.duration;
-  const receiverView =
-    typeof receiverDuration === 'number' &&
-    Number.isFinite(receiverDuration) &&
-    receiverDuration > 0
-      ? ` · receiver window ${(receiverDuration / 3600).toFixed(1)}h`
+  const rm = cast.receiverMedia;
+  const receiverWindow =
+    rm &&
+    typeof rm.duration === 'number' &&
+    Number.isFinite(rm.duration) &&
+    rm.duration > 0
+      ? ` · receiver window ${(rm.duration / 3600).toFixed(1)}h`
+      : '';
+  // Live playback position as the receiver reports it. Advancing = it is
+  // genuinely decoding the stream; stuck at ~0 while 'playing' = it believes
+  // it is playing something that is not our live audio.
+  const receiverPosition =
+    rm && typeof rm.currentTime === 'number' && rm.currentTime > 0
+      ? ` · t+${Math.round(rm.currentTime)}s`
       : '';
   const stateDetail = casting
-    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}${castProblem}${receiverView}`
+    ? `Casting to ${cast.deviceName ?? 'speaker'} · ${receiverStatus}${castMode}${castProblem}${receiverWindow}${receiverPosition}`
     : playing
       ? 'Live signal connected'
       : tunedIn

@@ -40,6 +40,15 @@
 // behaviour of those receivers and this mount rather than a guarantee. The
 // watchdog further down exists precisely because another firmware may not
 // behave the same way.
+//
+// UPDATE (2026-08-12, hardware evidence): the deployment's Caddy now strips
+// Range on the stream routes (Icecast's fake 206 can no longer be observed,
+// so no receiver can derive the seekable window at all — the original reason
+// for BUFFERED is gone server-side). On the user's actual speakers, BUFFERED
+// casts reported PLAYING but never produced audio, while the native app's
+// LIVE casts (no duration override) are the only ones ever observed to play.
+// So 'live' is the primary mode now, with the watchdog falling back to
+// 'buffered' for receivers that behave the opposite way round.
 
 import { useEffect, useRef, useState } from 'react';
 import { config } from '@/config';
@@ -65,9 +74,10 @@ export type ReceiverState =
   | 'stopped'
   | 'error';
 
-/** How the stream was described to the receiver. 'buffered' is the correct
- *  mode for this Icecast mount (see the note above); 'live' only appears if
- *  the watchdog below had to fall back to it. */
+/** How the stream was described to the receiver. 'live' is the primary mode:
+ *  the native app casts LIVE on this deployment (the only config observed to
+ *  produce audio on the user's speakers); 'buffered' only appears if the
+ *  watchdog below had to fall back to it. */
 export type StreamMode = 'buffered' | 'live';
 
 /** The receiver's own view of the loaded media — the ground truth for what
@@ -211,7 +221,7 @@ function isActiveSession(session: CastSession | null): boolean {
  *  playing" or "already spent the fallback" verdict. */
 function resetSessionState(): void {
   loadedAt = 0;
-  loadedMode = 'buffered';
+  loadedMode = 'live';
   sawPlaying = false;
   watchdogDisarmed = false;
   fallbackUsed = false;
@@ -451,7 +461,7 @@ export function useCast(): Cast {
     const token = attemptToken;
     pendingStart = false;
     adoptSession(session);
-    void loadRef.current(session, 'buffered', token).catch(() => {
+    void loadRef.current(session, 'live', token).catch(() => {
       teardownAttempt(context, token, session);
     });
   }
