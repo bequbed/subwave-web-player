@@ -79,7 +79,7 @@ body::before {
   font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
 }
 
-/* Thin, unobtrusive scrollbars for the scrolling panels (booth feed, queue). */
+/* Thin, unobtrusive scrollbars for the scrolling panels (queue). */
 .scroll-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--rule) transparent;

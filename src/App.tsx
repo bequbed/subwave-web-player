@@ -14,7 +14,6 @@ import { listenerCount } from '@/lib/format';
 import { NowPlaying } from '@/components/NowPlaying';
 import { PlayerBar } from '@/components/PlayerBar';
 import { OnAir } from '@/components/OnAir';
-import { BoothFeed } from '@/components/BoothFeed';
 import { Queue } from '@/components/Queue';
 import { RequestBox } from '@/components/RequestBox';
 import { Schedule } from '@/components/Schedule';
@@ -97,22 +96,19 @@ function PlayerView() {
           <PlayerBar player={player} />
         </section>
 
+        {/* Request | Queue: the interactive pair. The Booth's raw DJ decision
+            log was removed — it leaked LLM prompts and internal ids, and
+            nobody read it. The freed width goes to these two, now peers. */}
         <section
-          aria-label="Station activity"
-          className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8"
+          aria-label="Requests and queue"
+          className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8"
         >
-          <section aria-label="The Booth" className="h-[26rem] lg:col-span-7 lg:h-[34rem]">
-            <BoothFeed />
-          </section>
-          {/* Request sits above Queue — it's the only interactive thing here. */}
-          <div className="flex min-w-0 flex-col gap-6 lg:col-span-5 lg:h-[34rem]">
-            <aside aria-label="Request a track" className="min-h-[19rem] shrink-0">
-              <RequestBox />
-            </aside>
-            <aside aria-label="On the Deck" className="h-[22rem] min-h-0 lg:h-auto lg:flex-1">
-              <Queue />
-            </aside>
-          </div>
+          <aside aria-label="Request a track" className="min-w-0">
+            <RequestBox />
+          </aside>
+          <aside aria-label="On the Deck" className="min-w-0">
+            <Queue />
+          </aside>
         </section>
 
         <section aria-label="Weekly schedule">
