@@ -100,7 +100,6 @@ export function PlayerBar({ player }: { player: Player }) {
   const cast = useCast();
   const casting = cast.state === 'connected';
   const castConnecting = cast.state === 'connecting';
-  const bitrate = nowPlaying?.streamBitrate ?? null;
   const tokens = nowPlaying?.llmTokens ?? null;
 
   // When a cast session takes over, hand local playback off — the speaker is
@@ -271,7 +270,6 @@ export function PlayerBar({ player }: { player: Player }) {
 
           {/* Secondary vitals stay off the compact mobile rail. */}
           <div className="hidden flex-wrap items-center gap-x-6 gap-y-3 sm:flex sm:justify-end">
-            {bitrate != null && <Vital label="kbps" value={String(bitrate)} />}
             {tokens != null && <Vital label="DJ tokens" value={compact(tokens)} />}
           </div>
 
