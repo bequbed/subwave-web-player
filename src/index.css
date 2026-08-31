@@ -17,6 +17,10 @@
   --ember: #a63d1e;
   --tide: #17544c;
 
+  /* Theme-surface extras (set per theme below, overridden in dark). */
+  --vignette: linear-gradient(to bottom, rgb(23 20 15 / 3%), rgb(23 20 15 / 0%) 1200px);
+  --monogram-hilite: rgb(255 255 255 / 0.9);
+
   /* Alias layer. --ink was the page black in the dark theme and doubles as the
      on-accent text colour; on paper both roles are served by --paper. */
   --bg: var(--paper);
@@ -40,6 +44,49 @@
   --plate-shadow: 0 1px 2px rgb(23 20 15 / 0.05), 0 12px 32px rgb(23 20 15 / 0.07);
 
   color-scheme: light;
+}
+
+/* ---------------------------------------------------------------------------
+   MIDNIGHT — the same token contract, re-inked for after dark. Only the five
+   foundation colors move plus the alias layer; every component reads tokens,
+   so nothing below touches component code. Warm blacks (paper stays in the
+   family) instead of cool slate, and ember/tide are lightened just enough to
+   hold AA contrast against --graphite, which flips to the near-white text.
+   --------------------------------------------------------------------------- */
+html[data-theme='dark'] {
+  --paper: #17140f;
+  --leaf: #1e1a14;
+  --leaf-raised: #262119;
+  --graphite: #ece5d8;
+  --pencil: #a89f90;
+  --rule: rgb(236 229 216 / 14%);
+
+  --ember: #e06a41;
+  --tide: #58a99e;
+
+  --vignette: linear-gradient(to bottom, rgb(0 0 0 / 28%), rgb(0 0 0 / 0%) 1200px);
+  --monogram-hilite: rgb(0 0 0 / 0.55);
+
+  --bg: var(--paper);
+  --ink: var(--paper);
+  --panel: var(--leaf);
+  --surface: var(--leaf);
+  --panel-2: var(--leaf-raised);
+  --surface-raised: var(--leaf-raised);
+  --fg: var(--graphite);
+  --foreground: var(--graphite);
+  --muted: var(--pencil);
+  --metadata: var(--pencil);
+  --line: var(--rule);
+  --border-soft: var(--rule);
+  --signal: var(--ember);
+  --accent: var(--ember);
+  --atmosphere: var(--tide);
+  --accent-2: var(--tide);
+
+  --plate-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+
+  color-scheme: dark;
 }
 
 html,
@@ -66,7 +113,7 @@ body::before {
   inset: 0;
   content: '';
   pointer-events: none;
-  background: linear-gradient(to bottom, rgb(23 20 15 / 3%), rgb(23 20 15 / 0%) 1200px);
+  background: var(--vignette);
 }
 
 #root {

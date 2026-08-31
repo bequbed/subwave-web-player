@@ -18,6 +18,7 @@ import { Queue } from '@/components/Queue';
 import { RequestBox } from '@/components/RequestBox';
 import { Schedule } from '@/components/Schedule';
 import { SignalDot } from '@/components/ui/SignalDot';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 function stationHost() {
   try {
@@ -52,6 +53,7 @@ function Masthead() {
               </span>
             )}
             <SignalDot online={online} ready={ready} />
+            <ThemeToggle />
           </div>
           {/* On desktop the on-air host reads as the masthead byline. It has to
               hold any guest count inside the page width, so it stays full-width

@@ -3,8 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- LONGWAVE: unbleached paper browser chrome, no dark shell. -->
+    <!-- LONGWAVE: unbleached paper browser chrome; dark chrome is also
+         advertised so OS-level UI matches when the player runs dark. -->
     <meta name="theme-color" content="#f4f0e9" />
+    <meta name="theme-color" content="#17140f" media="(prefers-color-scheme: dark)" />
+    <!-- Theme before first paint: the saved choice wins, else the OS
+         preference. React's useTheme owns the attribute from hydration on —
+         this inline run only exists so there is no light flash on load. -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('subwave-theme');
+          var dark =
+            saved === 'dark' ||
+            (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+        } catch (e) {
+          /* default stays light */
+        }
+      })();
+    </script>
     <!-- Paper tile, near-square corners, graphite broadcast ring, ember centre. -->
     <link
       rel="icon"

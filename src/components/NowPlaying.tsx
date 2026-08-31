@@ -19,7 +19,7 @@ function Monogram({ className = '' }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`type-display select-none leading-none text-[var(--rule)] [text-shadow:0_1px_0_rgb(255_255_255/0.9)] ${className}`}
+      className={`type-display select-none leading-none text-[var(--rule)] [text-shadow:0_1px_0_var(--monogram-hilite)] ${className}`}
     >
       SW
     </span>
