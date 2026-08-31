@@ -14,7 +14,7 @@ import { listenerCount } from '@/lib/format';
 import { NowPlaying } from '@/components/NowPlaying';
 import { PlayerBar } from '@/components/PlayerBar';
 import { OnAir } from '@/components/OnAir';
-import { Queue } from '@/components/Queue';
+// import { Queue } from '@/components/Queue'; // ⏸ On the Deck parked — see note below
 import { RequestBox } from '@/components/RequestBox';
 import { Schedule } from '@/components/Schedule';
 import { SignalDot } from '@/components/ui/SignalDot';
@@ -98,19 +98,19 @@ function PlayerView() {
           <PlayerBar player={player} />
         </section>
 
-        {/* Request | Queue: the interactive pair. The Booth's raw DJ decision
-            log was removed — it leaked LLM prompts and internal ids, and
-            nobody read it. The freed width goes to these two, now peers. */}
-        <section
-          aria-label="Requests and queue"
-          className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8"
-        >
-          <aside aria-label="Request a track" className="min-w-0">
-            <RequestBox />
-          </aside>
-          <aside aria-label="On the Deck" className="min-w-0">
-            <Queue />
-          </aside>
+        {/* ⏸ ON THE DECK — parked 2026-08-31: a shared live stream shouldn't
+            spoil what's coming; anticipation is part of radio. Re-enable the
+            <aside> below to bring the queue back (component kept, passes lint).
+            <aside aria-label="On the Deck" className="min-w-0">
+              <Queue />
+            </aside>
+        */}
+        {/* Request a track. The Android app's quick-pick chips live inside
+            RequestBox, so this row is now a single full-width card and the
+            page collapses back to an editorial spine: hero → request →
+            schedule. */}
+        <section aria-label="Request a track" className="min-w-0">
+          <RequestBox />
         </section>
 
         <section aria-label="Weekly schedule">
