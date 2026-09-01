@@ -169,12 +169,12 @@ export function PlayerBar({ player }: { player: Player }) {
     cast.receiverState === 'playing'
       ? typeof cast.receiverPosition === 'number' && cast.receiverPosition > 0
         ? `playing · t+${Math.round(cast.receiverPosition)}s`
-        : 'warming up… (audio starts in a few minutes)'
+        : 'receiver reports playing · audio may still be starting'
       : rawStatus;
-  // 'live' only ever appears if the watchdog had to re-load in the other
-  // stream mode, so showing it is worth the extra words — it says which path
-  // the receiver was last asked for.
-  const castMode = cast.streamMode === 'live' ? ' (live mode)' : '';
+  // 'buffered' only ever appears if the watchdog had to re-load in the other
+  // stream mode (live is the primary mode and shows no badge), so showing it
+  // is worth the extra words — it says the receiver is on the abnormal path.
+  const castMode = cast.streamMode === 'buffered' ? ' (buffered mode)' : '';
   // A failed retry is reported rather than swallowed: the receiver state alone
   // can look identical to a healthy one that simply hasn't started yet.
   const castProblem = cast.loadError ? ` · ${cast.loadError}` : '';

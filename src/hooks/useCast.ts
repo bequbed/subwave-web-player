@@ -113,8 +113,11 @@ const BUFFERING_FALLBACK_AFTER_MS = 45000;
  *  currentTime still read 0 four minutes in and only started advancing past
  *  ~7 min. The clock lag on this firmware is real but the decode is not, so
  *  the fallback must not fire inside that window: 10 minutes covers the worst
- *  observed lag with margin, and a genuinely dead receiver can simply be
- *  stopped and re-cast by hand. */
+ *  observed lag with margin. The cost: a genuinely dead receiver — whose
+ *  frozen PLAYING is indistinguishable from a healthy one — sits in this
+ *  state for the full window; stopping the cast by hand is the only faster
+ *  recovery (re-casting retries LIVE, the only mode observed to play here;
+ *  the alternate-mode attempt happens only when this window expires). */
 const FROZEN_PLAYING_FALLBACK_AFTER_MS = 600000;
 
 /** Google's built-in Default Media Receiver — usable without any registration
@@ -254,8 +257,11 @@ function fallbackDelayFor(
 ): number | null {
   switch (playerState) {
     case 'PLAYING':
-      // CAF can announce PLAYING before the Default Media Receiver has
-      // decoded any live audio. A frozen zero clock is not successful playback.
+      // CAF announces PLAYING long before this firmware's clock moves
+      // (measured: audio audible while currentTime still read 0 at 4 min).
+      // A frozen zero clock is not *confirmation* of playback — the delay
+      // below simply outlasts the worst observed clock lag before the
+      // other mode is tried.
       return currentTime === null || currentTime === 0
         ? FROZEN_PLAYING_FALLBACK_AFTER_MS
         : null;
@@ -320,8 +326,8 @@ export interface Cast {
   /** Which stream mode the receiver was last asked for, or null when nothing
    *  has been loaded. Set the moment a load is *dispatched*, so a hung or
    *  failed fallback can never leave the rail claiming the mode that already
-   *  demonstrably didn't play. 'live' means the watchdog fell back — worth
-   *  surfacing, it is diagnostic. */
+   *  demonstrably didn't play. 'buffered' means the watchdog fell back from
+   *  the primary live mode — worth surfacing, it is diagnostic. */
   streamMode: StreamMode | null;
   /** Set when a load attempt failed outright and the session was left up
    *  (the watchdog fallback). Rendered in the rail so a silent receiver is
@@ -616,8 +622,11 @@ export function useCast(): Cast {
   // While a session is active, poll the receiver's media state once a second.
   // This is the ground truth for "connected but silent": IDLE means the load
   // was accepted but the receiver isn't playing it; BUFFERING forever means
-  // its fetch of the stream URL is stalling; PLAYING means audio should be
-  // audible (and any silence is device-side).
+  // its fetch of the stream URL is stalling. PLAYING is ambiguous on this
+  // firmware — audio may already be audible while the clock still reads 0,
+  // or the receiver may genuinely be dead — so a moving clock is the
+  // confirmation signal, and the watchdog below outlasts the measured lag
+  // before retrying in the other mode.
   useEffect(() => {
     if (state !== 'connected') {
       setReceiverState('unknown');
@@ -649,7 +658,9 @@ export function useCast(): Cast {
       const media = session.getMediaSession();
       const ps = media?.playerState;
       const idleReason = media?.idleReason ?? undefined;
-      // Live playback position — the honest "is it actually playing" tell.
+      // The receiver's playback clock. On this firmware it lags real decode
+      // by minutes (frozen ≠ silent, moving = confirmed), so it is a
+      // confirmation signal, not an audibility test.
       setReceiverPosition(
         typeof media?.currentTime === 'number' ? media.currentTime : null,
       );
@@ -676,8 +687,11 @@ export function useCast(): Cast {
         setReceiverMedia(null);
       }
       const position = typeof media?.currentTime === 'number' ? media.currentTime : null;
-      // PLAYING with a frozen zero clock is the known silent warm-up state;
-      // only advancing playback counts as successful decoding.
+      // PLAYING with a frozen zero clock is ambiguous on this firmware —
+      // measured audible audio while the clock still read 0 — so a moving
+      // clock is treated as confirmation of decoding, while a frozen one is
+      // not treated as failure (the watchdog's 10-minute window handles the
+      // truly dead receiver).
       if (ps === 'PLAYING' && position !== null && position > 0) sawPlaying = true;
       // A receiver that is paused or was stopped on the device has the media
       // and is deliberately not playing it. Disarm permanently: the elapsed
