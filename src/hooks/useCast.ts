@@ -423,15 +423,12 @@ export function useCast(): Cast {
     mediaInfo.metadata = metadata;
 
     const request = new cc.media.LoadRequest(mediaInfo);
-    // Both already match the SDK constructor defaults (autoplay = true,
-    // currentTime = null). They are set explicitly because they are the two
-    // properties that decide whether the receiver starts, and where — pinning
-    // currentTime to 0 asks for playback from the beginning rather than a
-    // seek, which is what kept the tested receivers on the open-ended read
-    // Icecast serves cleanly. The watchdog covers firmware that reads it
-    // differently.
+    // Explicitly autoplay, but leave the position unset. For a LIVE media
+    // request, `currentTime = 0` is not "start at the live edge": some CAF
+    // receivers interpret it as a seek request and reject/stall a never-ending
+    // Icecast mount. The SDK's null default is the correct live-stream value.
     request.autoplay = true;
-    request.currentTime = 0;
+    request.currentTime = null;
 
     // loadMedia RESOLVES with an error code on failure — it does not reject —
     // so the result must be checked or a failed load would be silent.
