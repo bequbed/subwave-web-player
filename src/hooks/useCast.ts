@@ -105,6 +105,10 @@ const FALLBACK_AFTER_MS = 10000;
  *  mode already known to be wrong for this mount would make that *worse*, so
  *  buffering gets a much longer rope than silence does. */
 const BUFFERING_FALLBACK_AFTER_MS = 45000;
+/** Some Default Media Receiver versions report PLAYING immediately for a live
+ *  mount, while their playback clock remains at zero during startup. Give that
+ *  state enough time to become real playback before trying the other mode. */
+const FROZEN_PLAYING_FALLBACK_AFTER_MS = 180000;
 
 /** Google's built-in Default Media Receiver — usable without any registration
  *  or API keys (https://developers.google.com/cast/docs/web_sender). */
@@ -236,9 +240,18 @@ function resetSessionState(): void {
  *  own transport); reloading with autoplay would restart audio a listener
  *  deliberately stopped. CANCELLED/INTERRUPTED likewise mean something took the
  *  media away on purpose — including our own replacement load. */
-function fallbackDelayFor(playerState?: string, idleReason?: string): number | null {
+function fallbackDelayFor(
+  playerState?: string,
+  idleReason?: string,
+  currentTime?: number | null,
+): number | null {
   switch (playerState) {
     case 'PLAYING':
+      // CAF can announce PLAYING before the Default Media Receiver has
+      // decoded any live audio. A frozen zero clock is not successful playback.
+      return currentTime === null || currentTime === 0
+        ? FROZEN_PLAYING_FALLBACK_AFTER_MS
+        : null;
     case 'PAUSED':
       return null;
     case 'BUFFERING':
@@ -653,7 +666,10 @@ export function useCast(): Cast {
       } else {
         setReceiverMedia(null);
       }
-      if (ps === 'PLAYING') sawPlaying = true;
+      const position = typeof media?.currentTime === 'number' ? media.currentTime : null;
+      // PLAYING with a frozen zero clock is the known silent warm-up state;
+      // only advancing playback counts as successful decoding.
+      if (ps === 'PLAYING' && position !== null && position > 0) sawPlaying = true;
       // A receiver that is paused or was stopped on the device has the media
       // and is deliberately not playing it. Disarm permanently: the elapsed
       // clock below would otherwise fire the moment it is unpaused.
@@ -663,7 +679,7 @@ export function useCast(): Cast {
       // starts playing raises no error and never tears the session down, so
       // nothing else would ever notice. Reload once in the other stream mode;
       // token- and session-guarded, and spent at most once per session.
-      const delay = fallbackDelayFor(ps, idleReason);
+      const delay = fallbackDelayFor(ps, idleReason, position);
       if (
         !sawPlaying &&
         !watchdogDisarmed &&
