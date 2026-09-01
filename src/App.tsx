@@ -13,6 +13,7 @@ import { config } from '@/config';
 import { listenerCount } from '@/lib/format';
 import { NowPlaying } from '@/components/NowPlaying';
 import { PlayerBar } from '@/components/PlayerBar';
+import { ContextLine } from '@/components/ContextLine';
 import { OnAir } from '@/components/OnAir';
 // import { Queue } from '@/components/Queue'; // ⏸ On the Deck parked — see note below
 import { RequestBox } from '@/components/RequestBox';
@@ -43,6 +44,7 @@ function Masthead() {
           <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-[var(--pencil)]">
             {stationHost()}
           </p>
+          <ContextLine />
         </div>
 
         <div className="flex min-w-0 max-w-full flex-col gap-4 sm:items-end">

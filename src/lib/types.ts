@@ -28,6 +28,12 @@ export interface WeatherContext {
   location?: string;
 }
 export interface TimeContext {
+  /** Fixed day-period label from the controller: 'early-morning', 'morning',
+   *  'midday', 'afternoon', 'drive-time', 'evening', 'late-evening',
+   *  'after-hours'. */
+  period?: string;
+  /** Mood word for the period (settings.moodSchedule): 'focus', 'driving', … */
+  mood?: string;
   show?: string;
   vibe?: string;
 }
