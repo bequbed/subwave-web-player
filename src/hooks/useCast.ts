@@ -404,15 +404,10 @@ export function useCast(): Cast {
     );
     mediaInfo.streamType =
       mode === 'live' ? cc.media.StreamType.LIVE : cc.media.StreamType.BUFFERED;
-    if (mode === 'live') {
-      // -1 = endless, which is what Google documents for LIVE. Without it the
-      // receiver derives a seekable window from Icecast's fabricated 1GiB
-      // Content-Range and seeks into audio that does not exist. Left untouched
-      // in BUFFERED mode on purpose: there the receivers tested read the mount
-      // open-ended, get a 200 with no Content-Length, and infer an endless
-      // stream by themselves — the same way the local <audio> element plays it.
-      mediaInfo.duration = -1;
-    }
+    // Do not set MediaInfo.duration for the live mount. LIVE already tells the
+    // receiver that this is an endless stream, and the native SUB/WAVE sender
+    // leaves duration unset. Supplying -1 is accepted by some CAF versions but
+    // is rejected as an invalid media parameter by others.
     const metadata = new cc.media.MusicTrackMediaMetadata();
     metadata.title = track?.title ?? station ?? 'SUB/WAVE';
     metadata.artist = track?.artist ?? station ?? 'Live';

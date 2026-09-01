@@ -152,8 +152,8 @@ declare global {
     /** Constructor default is already true; set explicitly so the intent
      *  survives any SDK change. */
     autoplay: boolean;
-    /** Seconds to start at. Pinning this to 0 keeps the receiver on the
-     *  progressive read it can actually serve, instead of a seek. */
+    /** Optional start position. Null leaves a LIVE stream at the receiver's
+     *  live position instead of requesting a seek. */
     currentTime: number | null;
   }
 }
