@@ -160,9 +160,10 @@ export function PlayerBar({ player }: { player: Player }) {
   // Receiver-reported media state while casting — the ground truth for
   // "connected but silent". 'playing' is NOT the same as audible on this
   // deployment: the Default Media Receiver reports PLAYING immediately after
-  // a load, then takes 1.5–3 minutes to actually start audio (currentTime
-  // frozen at 0 the whole time). So while the state is 'playing', the rail
-  // says "warming up…" until the receiver's clock starts moving.
+  // a load, and on this firmware the playback clock lags reality by minutes
+  // (measured 2026-09-01: mount fetched 3s in, audio audible ~3 min, clock
+  // only advancing past ~7 min). The clock moving is treated as confirmation;
+  // until then the rail says "warming up…".
   const rawStatus = RECEIVER_STATUS[cast.receiverState];
   const playingLabel =
     cast.receiverState === 'playing'

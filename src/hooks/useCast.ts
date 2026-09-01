@@ -106,9 +106,16 @@ const FALLBACK_AFTER_MS = 10000;
  *  buffering gets a much longer rope than silence does. */
 const BUFFERING_FALLBACK_AFTER_MS = 45000;
 /** Some Default Media Receiver versions report PLAYING immediately for a live
- *  mount, while their playback clock remains at zero during startup. Give that
- *  state enough time to become real playback before trying the other mode. */
-const FROZEN_PLAYING_FALLBACK_AFTER_MS = 180000;
+ *  mount, while their playback clock stays at zero — and on the JBL BAR
+ *  (CrKey/1.56.500000, measured 2026-09-01 with a pychromecast replica of this
+ *  hook's exact load) the clock is NOT a warm-up signal at all: the mount was
+ *  being fetched 3s after the load and audio was audibly playing, yet
+ *  currentTime still read 0 four minutes in and only started advancing past
+ *  ~7 min. The clock lag on this firmware is real but the decode is not, so
+ *  the fallback must not fire inside that window: 10 minutes covers the worst
+ *  observed lag with margin, and a genuinely dead receiver can simply be
+ *  stopped and re-cast by hand. */
+const FROZEN_PLAYING_FALLBACK_AFTER_MS = 600000;
 
 /** Google's built-in Default Media Receiver — usable without any registration
  *  or API keys (https://developers.google.com/cast/docs/web_sender). */
@@ -297,9 +304,11 @@ export interface Cast {
   receiverState: ReceiverState;
   /** Live playback position (s) the receiver reports, or null while no media
    *  session is attached. The rail shows "warming up…" while the state is
-   *  'playing' but this stays 0 — the Default Media Receiver on this
-   *  deployment takes 1.5–3 minutes to actually start audio after a load,
-   *  and during that window it reports PLAYING with a frozen clock. */
+   *  'playing' but this stays 0 — on the JBL BAR's firmware the clock lags
+   *  reality by minutes (measured: mount fetched 3s after the load and audio
+   *  audible ~3 min in, yet currentTime still 0 at 4 min; advancing only
+   *  past ~7 min), so a moving clock means playing, but a frozen one does
+   *  NOT mean silent. */
   receiverPosition: number | null;
   /** Set when opening the device picker fails (requestSession rejected or
    *  hung). Rendered in the rail so a dead cast button is never silent. */
