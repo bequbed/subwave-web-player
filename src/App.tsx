@@ -9,7 +9,6 @@ import { StationFeedProvider, useStationFeed } from '@/hooks/useStationFeed';
 import { usePlayer } from '@/hooks/usePlayer';
 import { useCast } from '@/hooks/useCast';
 import { useMediaSession } from '@/hooks/useMediaSession';
-import { config } from '@/config';
 import { listenerCount } from '@/lib/format';
 import { NowPlaying } from '@/components/NowPlaying';
 import { PlayerBar } from '@/components/PlayerBar';
@@ -21,14 +20,6 @@ import { Schedule } from '@/components/Schedule';
 import { SignalDot } from '@/components/ui/SignalDot';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
-function stationHost() {
-  try {
-    return new URL(config.stationUrl).host;
-  } catch {
-    return config.stationUrl;
-  }
-}
-
 function Masthead() {
   const { online, ready, nowPlaying } = useStationFeed();
   const station = nowPlaying?.dj?.station || 'SUB/WAVE';
@@ -38,12 +29,15 @@ function Masthead() {
     <header className="mb-8 border-b border-[var(--rule)] pb-5 sm:mb-10">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="type-display truncate text-2xl font-semibold leading-tight tracking-[-0.02em] text-[var(--graphite)] sm:text-3xl">
+          {/* The full stop is the flair: a print-masthead signature period in
+              ember after the serif name. No truncate — a long name wraps
+              instead (balance keeps the lines even), so the dot can never be
+              clipped out of view by overflow-hidden. aria-hidden keeps the
+              period out of the heading's accessible name. */}
+          <h1 className="type-display min-w-0 text-2xl font-semibold italic leading-tight tracking-[-0.02em] text-[var(--graphite)] [text-wrap:balance] sm:text-3xl">
             {station}
+            <span aria-hidden="true" className="text-[var(--ember)]">.</span>
           </h1>
-          <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-[var(--pencil)]">
-            {stationHost()}
-          </p>
           <ContextLine />
         </div>
 
