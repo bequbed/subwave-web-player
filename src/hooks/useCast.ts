@@ -734,19 +734,30 @@ export function useCast(): Cast {
       // stuck in 'connecting' — every later tap would silently no-op — so
       // race it against a 45s guard and recover to idle.
       const rs = context.requestSession();
-      const guard = new Promise<void>((resolve) => {
-        window.setTimeout(resolve, 45000);
+      // requestSession() can settle before CAF has attached the session to
+      // CastContext. A plain Promise.race followed by getCurrentSession() made
+      // that timing window look like a timeout, then ended the valid session
+      // before SESSION_STARTED/CONNECTED could consume pendingStart.
+      const timeout = Symbol('cast-session-timeout');
+      const guard = new Promise<typeof timeout>((resolve) => {
+        window.setTimeout(() => resolve(timeout), 45000);
       });
-      await Promise.race([rs, guard]);
+      const outcome = await Promise.race([rs, guard]);
       if (attemptToken !== token) return; // stop/start/disconnect superseded us
-      const session = context.getCurrentSession();
-      if (!session) {
-        // The picker never settled (or was dismissed without settling).
+      if (outcome === timeout) {
         setCastError('Cast picker timed out — tap the cast button to retry');
         teardownAttempt(context, token);
         return;
       }
-      consumePendingStart(context, session);
+      const session = context.getCurrentSession();
+      if (session) {
+        // Usually the session is available here. If CAF attaches it a little
+        // later, the pending flag remains set and the lifecycle event or the
+        // polling backstop will load the media when the session appears.
+        consumePendingStart(context, session);
+      }
+      // Do not tear down when requestSession() won but the session is not
+      // attached yet. That is a real CAF timing window, not a timeout.
     } catch (err) {
       // Dismissing the picker rejects — that is a success-no-op, not an
       // error. Anything else is a real failure and must be visible.
