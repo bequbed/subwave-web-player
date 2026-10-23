@@ -349,7 +349,7 @@ export function DriftView() {
           </div>
           {!offline && (
             <button
-              key={trackKey}
+              key={`title:${trackKey}`}
               type="button"
               onClick={handleTune}
               aria-label={
@@ -365,7 +365,7 @@ export function DriftView() {
           )}
           {!offline && metaLine && (
             <div
-              key={trackKey}
+              key={`meta:${trackKey}`}
               className="drift-type-in max-w-full truncate font-mono text-[12px] tracking-[0.2em] text-ink/75 uppercase"
             >
               {metaLine}
