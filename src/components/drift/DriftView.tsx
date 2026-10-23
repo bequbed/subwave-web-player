@@ -165,8 +165,12 @@ export function DriftView() {
   const handleTune = () => {
     if (casting) return;
     if (!tunedIn) player.tuneIn();
-    else player.toggle();
+    // Stopping mid-connect cancels the attempt instead of restarting it.
+    else if (playing || player.loading) player.stop();
+    else player.tuneIn();
   };
+  // Shared by the visible hint and the title's accessible name so they can't drift.
+  const tuneAction = casting ? null : playing || player.loading ? 'stop' : 'listen';
 
   const listenerCount = listenerCountOf(np?.listeners);
   const { stationName, djName, showName } = stationIdentity(np?.dj, activeShow, context);
@@ -341,13 +345,19 @@ export function DriftView() {
             </div>
           )}
           <div className="mt-2 font-mono text-[10px] tracking-[0.28em] text-accent-2 uppercase">
-            {offline ? 'off air' : playing || casting ? 'now playing' : 'now playing — tap to listen'}
+            {offline ? 'off air' : tuneAction ? `now playing — tap to ${tuneAction}` : 'now playing'}
           </div>
           {!offline && (
             <button
               key={trackKey}
               type="button"
               onClick={handleTune}
+              aria-label={
+                tuneAction
+                  ? `${tuneAction === 'stop' ? 'Stop listening' : 'Listen'} — ${track?.title ?? 'somewhere on the dial'}`
+                  : undefined
+              }
+              aria-disabled={casting || undefined}
               className="drift-type-in v3-focus pointer-events-auto max-w-full cursor-pointer border-0 bg-transparent p-0 font-display text-[clamp(26px,5vw,46px)] leading-[1.1] font-semibold text-ink"
             >
               {track?.title ?? 'somewhere on the dial'}
