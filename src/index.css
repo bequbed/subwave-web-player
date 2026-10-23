@@ -1,185 +1,54 @@
 @import 'tailwindcss';
 
-/* ---------------------------------------------------------------------------
-   LONGWAVE tokens — printed matter for a station that never stops.
-   Warm unbleached paper, ink-black type, one oxidized-terracotta accent.
-   The named foundation describes the visual system; the alias layer keeps the
-   existing component API (--bg, --panel, --fg, --accent, …) resolving, so a
-   retint never needs a component edit.
-   --------------------------------------------------------------------------- */
+/* Classic Dark — the only theme (SUB/WAVE Drift skin). */
 :root {
-  --paper: #f4f0e9;
-  --leaf: #fbf8f3;
-  --leaf-raised: #ebe5da;
-  --graphite: #17140f;
-  --pencil: #6b6459;
-  --rule: rgb(23 20 15 / 12%);
-  --ember: #a63d1e;
-  --tide: #17544c;
-
-  /* Theme-surface extras (set per theme below, overridden in dark). */
-  --vignette: linear-gradient(to bottom, rgb(23 20 15 / 3%), rgb(23 20 15 / 0%) 1200px);
-  --monogram-hilite: rgb(255 255 255 / 0.9);
-
-  /* Alias layer. --ink was the page black in the dark theme and doubles as the
-     on-accent text colour; on paper both roles are served by --paper. */
-  --bg: var(--paper);
-  --ink: var(--paper);
-  --panel: var(--leaf);
-  --surface: var(--leaf);
-  --panel-2: var(--leaf-raised);
-  --surface-raised: var(--leaf-raised);
-  --fg: var(--graphite);
-  --foreground: var(--graphite);
-  --muted: var(--pencil);
-  --metadata: var(--pencil);
-  --line: var(--rule);
-  --border-soft: var(--rule);
-  --signal: var(--ember);
-  --accent: var(--ember);
-  --atmosphere: var(--tide);
-  --accent-2: var(--tide);
-
-  /* The single elevation in the system: the artwork plate and the sticky rail. */
-  --plate-shadow: 0 1px 2px rgb(23 20 15 / 0.05), 0 12px 32px rgb(23 20 15 / 0.07);
-
-  color-scheme: light;
-}
-
-/* ---------------------------------------------------------------------------
-   MIDNIGHT — the same token contract, re-inked for after dark. Only the five
-   foundation colors move plus the alias layer; every component reads tokens,
-   so nothing below touches component code. Warm blacks (paper stays in the
-   family) instead of cool slate, and ember/tide are lightened just enough to
-   hold AA contrast against --graphite, which flips to the near-white text.
-   --------------------------------------------------------------------------- */
-html[data-theme='dark'] {
-  --paper: #17140f;
-  --leaf: #1e1a14;
-  --leaf-raised: #262119;
-  --graphite: #ece5d8;
-  --pencil: #a89f90;
-  --rule: rgb(236 229 216 / 14%);
-
-  --ember: #e06a41;
-  --tide: #58a99e;
-
-  --vignette: linear-gradient(to bottom, rgb(0 0 0 / 28%), rgb(0 0 0 / 0%) 1200px);
-  --monogram-hilite: rgb(0 0 0 / 0.55);
-
-  --bg: var(--paper);
-  --ink: var(--paper);
-  --panel: var(--leaf);
-  --surface: var(--leaf);
-  --panel-2: var(--leaf-raised);
-  --surface-raised: var(--leaf-raised);
-  --fg: var(--graphite);
-  --foreground: var(--graphite);
-  --muted: var(--pencil);
-  --metadata: var(--pencil);
-  --line: var(--rule);
-  --border-soft: var(--rule);
-  --signal: var(--ember);
-  --accent: var(--ember);
-  --atmosphere: var(--tide);
-  --accent-2: var(--tide);
-
-  --plate-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+  --bg: #100e0c;
+  --surface: #1b1815;
+  --surface-border: rgba(255, 255, 255, 0.12);
+  --field: color-mix(in oklab, #100e0c 92%, #ece6dc);
+  --ink: #ece6dc;
+  --muted: #c1c0bd;
+  --ink-faint: #8a837a;
+  --accent: oklch(0.62 0.22 25);
+  --accent-2: oklch(0.72 0.09 235);
+  --accent-soft: color-mix(in oklab, oklch(0.62 0.22 25) 20%, #100e0c);
+  --line: rgba(236, 230, 220, 0.22);
+  --soft-border: rgba(255, 255, 255, 0.1);
+  --overlay: rgba(0, 0, 0, 0.55);
 
   color-scheme: dark;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent-2: var(--accent-2);
+  --color-soft-border: var(--soft-border);
+
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-display: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 html,
 body,
 #root {
-  min-height: 100%;
+  height: 100%;
+  margin: 0;
 }
 
 body {
   position: relative;
   min-width: 320px;
-  margin: 0;
+  overflow: hidden;
   background: var(--bg);
-  color: var(--fg);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+  color: var(--ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* A single top vignette instead of a glow mesh — depth without light. */
-body::before {
-  position: fixed;
-  z-index: 0;
-  inset: 0;
-  content: '';
-  pointer-events: none;
-  background: var(--vignette);
-}
-
-#root {
-  position: relative;
-  z-index: 1;
-}
-
-/* The display face: system serif only, no webfont dependency. */
-.type-display {
-  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
-}
-
-/* Thin, unobtrusive scrollbars for the scrolling panels (queue). */
-.scroll-thin {
-  scrollbar-width: thin;
-  scrollbar-color: var(--rule) transparent;
-}
-.scroll-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.scroll-thin::-webkit-scrollbar-thumb {
-  background: var(--rule);
-  /* Chip radius. Fully round is reserved for live dots, avatars, volume thumb. */
-  border-radius: 2px;
-}
-
-@keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ember) 45%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 6px transparent;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-.pulse-ring {
-  animation: pulse-ring 2s infinite;
-}
-
-@keyframes bar {
-  0%,
-  100% {
-    transform: scaleY(0.35);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    transition-delay: 0ms !important;
-  }
-
-  /* The ON AIR dot stops breathing but keeps a static ring, so the live state
-     stays legible without motion. */
-  .pulse-ring {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ember) 45%, transparent) !important;
-  }
+.v3-focus:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }

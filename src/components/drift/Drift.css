@@ -1,0 +1,93 @@
+/* Drift skin — ported from upstream Drift.module.css, plain global classes. */
+
+.drift-wash {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Laid out at a quarter of the pool and scaled up 4x. A soft radial gradient
+   upscales invisibly, and holds 1/16 of the pixels while a fade runs. */
+.drift-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 25%;
+  height: 25%;
+  transform: scale(4);
+  transform-origin: 0 0;
+  background: radial-gradient(closest-side, var(--sw-drift-paint, var(--sw-drift-c)), transparent);
+  opacity: 0;
+  /* Keep in step with WASH_FADE_MS in DriftView.tsx. */
+  transition: opacity 20s linear;
+}
+.drift-front {
+  opacity: 1;
+}
+
+/* Dark pools run richer and brighter: saturate(1.35) brightness(1.2) baked
+   into the stop colour as that filter's sRGB colour matrix. */
+@supports (color: color(from red srgb clamp(0, 1.5 * r, 1) g b)) {
+  .drift-layer {
+    --sw-drift-boost: color(
+      from var(--sw-drift-c) srgb
+      clamp(0, 1.53054 * r - 0.3003 * g - 0.03024 * b, 1)
+      clamp(0, -0.08946 * r + 1.3197 * g - 0.03024 * b, 1)
+      clamp(0, -0.08946 * r - 0.3003 * g + 1.58976 * b, 1) / alpha
+    );
+  }
+  [data-theme='dark'] .drift-layer {
+    --sw-drift-paint: var(--sw-drift-boost);
+  }
+}
+@supports not (color: color(from red srgb clamp(0, 1.5 * r, 1) g b)) {
+  [data-theme='dark'] .drift-layer {
+    filter: saturate(1.35) brightness(1.2);
+  }
+}
+
+@keyframes drift-a {
+  to { transform: translate(34px, 22px) scale(1.06); }
+}
+@keyframes drift-b {
+  to { transform: translate(-28px, -30px) scale(1.04); }
+}
+@keyframes drift-c {
+  to { transform: translate(20px, -18px) scale(1.08); }
+}
+
+.drift-washA { animation: drift-a 90s ease-in-out infinite alternate; }
+.drift-washB { animation: drift-b 110s ease-in-out infinite alternate; }
+.drift-washC { animation: drift-c 130s ease-in-out infinite alternate; }
+
+@keyframes drift-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.drift-breathe {
+  animation: drift-breathe 6s ease-in-out infinite;
+}
+
+@keyframes drift-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.drift-type-in {
+  animation: drift-fade-in 0.9s ease both;
+}
+.drift-cover-in {
+  animation: drift-fade-in 1.2s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drift-washA,
+  .drift-washB,
+  .drift-washC,
+  .drift-breathe,
+  .drift-type-in,
+  .drift-cover-in {
+    animation: none;
+  }
+  .drift-layer {
+    transition: none;
+  }
+}
